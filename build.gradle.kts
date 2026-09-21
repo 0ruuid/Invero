@@ -6,14 +6,14 @@ plugins {
     java
     kotlin("jvm") version "2.2.0"
     kotlin("plugin.serialization") version "2.2.0"
-    id("io.izzel.taboolib") version "2.0.37"
+    id("io.izzel.taboolib") version "2.0.38"
     `maven-publish`
 }
 
 taboolib {
 
     version {
-        taboolib = "6.3.0-c6f096d"
+        taboolib = "6.3.0-75b18a2"
     }
 
     env {

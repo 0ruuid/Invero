@@ -4,6 +4,7 @@ import cc.trixey.invero.common.api.InveroSettings
 import cc.trixey.invero.common.message.toRawOrNot
 import cc.trixey.invero.ui.bukkit.api.isRegistered
 import cc.trixey.invero.ui.bukkit.nms.handler
+import cc.trixey.invero.ui.bukkit.nms.updateTitle
 import cc.trixey.invero.ui.bukkit.panel.CraftingPanel
 import cc.trixey.invero.ui.bukkit.util.clickType
 import cc.trixey.invero.ui.bukkit.util.synced
@@ -160,6 +161,7 @@ class InventoryVanilla(override val window: BukkitWindow) : ProxyBukkitInventory
 
         inventoryView = viewer.openInventory(container)
         containerId = handler.getContainerId(viewer)
+        window.updateTitle(window.title)
         updatePlayerInventory()
 
         // 使用 TabooLib 定时任务定期更新玩家物品栏，减少更新频率

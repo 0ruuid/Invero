@@ -24,6 +24,7 @@ import taboolib.common.platform.function.submit
 import taboolib.library.reflex.Reflex.Companion.invokeMethod
 import taboolib.module.nms.MinecraftVersion
 import taboolib.module.nms.MinecraftVersion.isUniversal
+import taboolib.module.nms.MinecraftVersion.isUnobfuscated
 import taboolib.module.nms.PacketReceiveEvent
 import taboolib.platform.event.PlayerJumpEvent
 import taboolib.platform.util.hasMeta
@@ -39,8 +40,9 @@ import taboolib.platform.util.removeMeta
 object Listener {
 
     private val FIELD_CONTAINER_ID = if (isUniversal) "containerId" else "id"
+    private val FIELD_CLICK_TYPE = if (isUnobfuscated) "containerInput" else "clickType"
     private val FILEDS_WINDOW_CLICK =
-        if (isUniversal) arrayOf("containerId", "slotNum", "buttonNum", "clickType", "carriedItem")
+        if (isUniversal) arrayOf("containerId", "slotNum", "buttonNum", FIELD_CLICK_TYPE, "carriedItem")
         else arrayOf("a", "slot", "button", "shift", "chemdah")
 
     @Awake(LifeCycle.ACTIVE)

@@ -7,6 +7,7 @@ import net.minecraft.world.inventory.Containers
 import org.bukkit.craftbukkit.v1_16_R3.entity.CraftPlayer
 import org.bukkit.craftbukkit.v1_16_R3.inventory.CraftItemStack
 import org.bukkit.craftbukkit.v1_16_R3.util.CraftChatMessage
+import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import taboolib.library.reflex.Reflex.Companion.getProperty
@@ -14,6 +15,7 @@ import taboolib.library.reflex.Reflex.Companion.setProperty
 import taboolib.library.reflex.Reflex.Companion.unsafeInstance
 import taboolib.module.nms.MinecraftVersion.isUniversal
 import taboolib.module.nms.MinecraftVersion.versionId
+import taboolib.module.nms.NMSItemTag
 import taboolib.module.nms.sendBundlePacketBlocking
 import taboolib.module.nms.sendPacketBlocking
 
@@ -82,7 +84,7 @@ class NMSImpl : NMS {
     private val fieldContainerID = if (versionId >= 11700) "containerId" else "a"
     private val fieldItems = if (versionId >= 11700) "items" else "b"
 
-    override fun sendWindowItems(player: Player, containerId: Int, itemStacks: List<ItemStack?>) {
+    override fun sendWindowItems(player: Player, containerId: Int, itemStacks: List<ItemStack?>, stateId: Int) {
         val instance = PacketPlayOutWindowItems::class.java.unsafeInstance()
         val items = itemStacks.asNMSCopy()
 
@@ -93,7 +95,7 @@ class NMSImpl : NMS {
                     "containerId" to containerId,
                     "items" to items,
                     "carriedItem" to itemAir,
-                    "stateId" to 1,
+                    "stateId" to stateId,
                 )
             }
 
@@ -124,6 +126,17 @@ class NMSImpl : NMS {
             else -> {
                 player.sendPacketBlocking(PacketPlayOutSetSlot(containerId, slot, itemStack.asNMSCopy()))
             }
+        }
+    }
+
+    override fun sendCursorItem(player: Player, itemStack: ItemStack?, stateId: Int) {
+        if (versionId >= 12104) {
+            player.postPacket(
+                NMSPacketPlayOutSetCursorItem::class.java.unsafeInstance(),
+                "contents" to NMSItemTag.asNMSCopy(itemStack ?: ItemStack(Material.AIR))
+            )
+        } else {
+            sendWindowSetSlot(player, -1, -1, itemStack, stateId)
         }
     }
 
@@ -193,3 +206,5 @@ class NMSImpl : NMS {
     }
 
 }
+
+private typealias NMSPacketPlayOutSetCursorItem = net.minecraft.network.protocol.game.ClientboundSetCursorItemPacket

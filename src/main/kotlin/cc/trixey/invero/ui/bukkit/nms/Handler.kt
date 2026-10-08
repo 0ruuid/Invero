@@ -73,7 +73,7 @@ fun BukkitWindow.updateTitle(title: String, updateInventory: Boolean = true) {
 }
 
 fun Player.sendCancelCoursor() {
-    handler.sendWindowSetSlot(this, -1, -1, null, 1)
+    handler.sendCursorItem(this, null, 1)
 }
 
 internal fun Player.postPacket(packet: Any, vararg fields: Pair<String, Any?>) = packet.apply {

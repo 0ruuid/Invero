@@ -22,7 +22,6 @@ import taboolib.common.LifeCycle
 import taboolib.common.platform.Awake
 import taboolib.common.platform.event.SubscribeEvent
 import taboolib.library.reflex.Reflex.Companion.invokeMethod
-import taboolib.module.nms.MinecraftVersion
 import taboolib.module.nms.MinecraftVersion.isUniversal
 import taboolib.module.nms.MinecraftVersion.isUnobfuscated
 import taboolib.module.nms.PacketReceiveEvent
@@ -164,8 +163,7 @@ object Listener {
                 }
 
                 packet.read<Int>(FILEDS_WINDOW_CLICK[0]).let { if (it != persistContainerId) return }
-                // 尝试在虚拟菜单取消收包，阻止校验
-                if (MinecraftVersion.versionId >= 12102) e.isCancelled = false
+                e.isCancelled = true
 
                 val rawSlot = packet.read<Number>(FILEDS_WINDOW_CLICK[1])?.toInt() ?: return
                 val button = packet.read<Number>(FILEDS_WINDOW_CLICK[2])?.toInt() ?: return
@@ -174,10 +172,7 @@ object Listener {
 
                 player.scheduleOnEntity {
                     val current = viewer.viewingWindow()?.inventory as? InventoryPacket ?: return@scheduleOnEntity
-                    if (rawSlot >= 0) {
-                        player.sendCancelCoursor()
-                        current.update(rawSlot)
-                    }
+                    current.resync()
                     current.handleClickEvent(rawSlot, type)
                 }
             }

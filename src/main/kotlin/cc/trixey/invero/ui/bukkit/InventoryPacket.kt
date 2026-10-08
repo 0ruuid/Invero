@@ -28,6 +28,7 @@ class InventoryPacket(override val window: BukkitWindow) : ProxyBukkitInventory 
     }
 
     private var closed: Boolean = true
+    private var stateId: Int = 0
     private var clickCallback: (slot: Int, type: ClickType) -> Boolean = { _, _ -> true }
 
     val windowItems = arrayOfNulls<ItemStack?>(containerType.entireWindowSize)
@@ -40,9 +41,9 @@ class InventoryPacket(override val window: BukkitWindow) : ProxyBukkitInventory 
             viewer.copyStorage().forEachIndexed { index, itemStack ->
                 val slot = containerSize + if (index < 9) index + 27 else index - 9
                 this[slot] = itemStack
-                if (update) update(slot)
             }
         }
+        if (update) update()
     }
 
     fun onClick(handler: (slot: Int, type: ClickType) -> Boolean): InventoryPacket {
@@ -56,14 +57,14 @@ class InventoryPacket(override val window: BukkitWindow) : ProxyBukkitInventory 
 
     fun update() {
         val viewer = viewer ?: return
-        handler.sendWindowItems(viewer, persistContainerId, windowItems.toList())
+        handler.sendWindowItems(viewer, persistContainerId, windowItems.toList(), nextStateId())
     }
 
     fun update(vararg slot: Int) {
         val viewer = viewer ?: return
 
         slot.forEach {
-            handler.sendWindowSetSlot(viewer, persistContainerId, it, windowItems[it])
+            handler.sendWindowSetSlot(viewer, persistContainerId, it, windowItems[it], nextStateId())
         }
     }
 
@@ -91,6 +92,7 @@ class InventoryPacket(override val window: BukkitWindow) : ProxyBukkitInventory 
         val viewer = viewer ?: return
 
         closed = false
+        stateId = 0
         updatePlayerItems()
         val replaced =
             runCatching {
@@ -115,7 +117,6 @@ class InventoryPacket(override val window: BukkitWindow) : ProxyBukkitInventory 
 
     fun handleClickEvent(slot: Int, type: ClickType) {
         if (!clickCallback(slot, type)) return
-        if (type.isItemMoveable) update()
         val pos = window.scale.convertToPosition(slot)
 
         window.panels.sortedByDescending { it.weight }.forEach {
@@ -126,6 +127,17 @@ class InventoryPacket(override val window: BukkitWindow) : ProxyBukkitInventory 
                 return
             }
         }
+    }
+
+    fun resync() {
+        val viewer = viewer ?: return
+        handler.sendCursorItem(viewer, null, nextStateId())
+        update()
+    }
+
+    private fun nextStateId(): Int {
+        stateId = stateId + 1 and 32767
+        return stateId
     }
 
 }

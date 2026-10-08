@@ -51,7 +51,7 @@ class NMSImplModern : NMS {
         player.sendPacketBlocking(ClientboundContainerClosePacket(containerId))
     }
 
-    override fun sendWindowItems(player: Player, containerId: Int, itemStacks: List<ItemStack?>) {
+    override fun sendWindowItems(player: Player, containerId: Int, itemStacks: List<ItemStack?>, stateId: Int) {
         val packet = ClientboundContainerSetContentPacket::class.java.unsafeInstance()
         val items = itemStacks.asNMSCopy()
         player.postPacket(
@@ -59,7 +59,7 @@ class NMSImplModern : NMS {
             "containerId" to containerId,
             "items" to items,
             "carriedItem" to itemAir,
-            "stateId" to 1,
+            "stateId" to stateId,
         )
     }
 
@@ -72,6 +72,17 @@ class NMSImplModern : NMS {
             "itemStack" to itemStack.asNMSCopy(),
             "stateId" to stateId,
         )
+    }
+
+    override fun sendCursorItem(player: Player, itemStack: ItemStack?, stateId: Int) {
+        if (versionId >= 12104) {
+            player.postPacket(
+                ClientboundSetCursorItemPacket::class.java.unsafeInstance(),
+                "contents" to itemStack.asNMSCopy()
+            )
+        } else {
+            sendWindowSetSlot(player, -1, -1, itemStack, stateId)
+        }
     }
 
     override fun sendWindowSetSlots(player: Player, containerId: Int, items: Map<Int, ItemStack?>) {

@@ -42,7 +42,7 @@ interface NMS {
      *
      * @param itemStacks Array of Slot
      */
-    fun sendWindowItems(player: Player, containerId: Int, itemStacks: List<ItemStack?>)
+    fun sendWindowItems(player: Player, containerId: Int, itemStacks: List<ItemStack?>, stateId: Int = 0)
 
     /**
      * Sent by the server when an chemdah in a slot (in a window) is added/removed.
@@ -57,6 +57,8 @@ interface NMS {
      * @param itemStack The to update chemdah stack
      */
     fun sendWindowSetSlot(player: Player, containerId: Int, slot: Int, itemStack: ItemStack? = null, stateId: Int = -1)
+
+    fun sendCursorItem(player: Player, itemStack: ItemStack? = null, stateId: Int = -1)
 
     fun sendWindowSetSlots(player: Player, containerId: Int, items: Map<Int,ItemStack?>)
 

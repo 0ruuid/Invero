@@ -10,7 +10,6 @@ import cc.trixey.invero.core.util.session
 import cc.trixey.invero.ui.bukkit.api.dsl.set
 import cc.trixey.invero.ui.bukkit.element.item.SimpleItem
 import cc.trixey.invero.ui.common.Panel
-import taboolib.common.platform.function.submitAsync
 
 /**
  * Invero
@@ -83,13 +82,13 @@ open class IconElement(
         if (inherit != null && inherit <= frames.maxIndex) frames.index = inherit
 
         fun loop(delay: Long) {
-            submitAsync(delay = delay) {
-                if (frames != framesCyclic || frames.isAnimationEnded() || shouldUnregister()) return@submitAsync
+            session.taskGroup.launch(delay = delay) {
+                if (frames != framesCyclic || frames.isAnimationEnded() || shouldUnregister()) return@launch
                 if (isVisible() && paused[2]) {
                     frame = frames.getAndCycle()
                     loop(frame?.delay ?: framesDefaultDelay)
                 }
-            }.also { session.taskGroup += it }
+            }
         }
 
         loop(0)

@@ -11,6 +11,8 @@ import cc.trixey.invero.core.command.createHelper
 import cc.trixey.invero.core.command.menu
 import cc.trixey.invero.core.command.player
 import cc.trixey.invero.core.command.suggestMenuIds
+import cc.trixey.invero.ui.bukkit.util.runOnOwner
+import cc.trixey.invero.ui.bukkit.util.FoliaRuntime
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import taboolib.common.platform.ProxyCommandSender
@@ -37,9 +39,7 @@ object CommandMenu {
     @CommandBody
     val reload = subCommand {
         execute<ProxyCommandSender> { sender, _, _ ->
-            submitAsync {
-                Invero.API.getMenuManager().reload(sender.cast())
-            }
+            FoliaRuntime.runGlobal { Invero.API.getMenuManager().reload(sender.cast()) }
         }
     }
 
@@ -57,12 +57,12 @@ object CommandMenu {
             }
 
             execute<CommandSender> { sender, ctx, _ ->
-                submitAsync { sender.notifyMenus(ctx.getOrNull("filter")?.lowercase()) }
+                sender.runOnOwner { sender.notifyMenus(ctx.getOrNull("filter")?.lowercase()) }
             }
         }
 
         execute<CommandSender> { sender, _, _ ->
-            submitAsync { sender.notifyMenus() }
+            sender.runOnOwner { sender.notifyMenus() }
         }
     }
 
@@ -98,19 +98,19 @@ object CommandMenu {
             suggestMenuIds()
             execute<CommandSender> { player, ctx, _ ->
                 val menu = ctx.menu ?: return@execute
+                player.sendLang("paste-init")
                 submitAsync {
                     val serialized = Invero.API.getMenuManager().serializeToJson(menu)
-                    player.sendLang("paste-init")
-
-                    paste(
+                    val result = paste(
                         "Invero Menu Serialization",
                         "menu serialized as json",
                         48,
                         TimeUnit.HOURS,
                         createContent("${menu.id}", serialized, "JSON"),
-                    ).apply {
-                        when (status) {
-                            SUCCESS -> player.sendLang("paste-success", anonymousLink)
+                    )
+                    player.runOnOwner {
+                        when (result.status) {
+                            SUCCESS -> player.sendLang("paste-success", result.anonymousLink)
                             ERROR -> player.sendLang("paste-failed")
                         }
                     }

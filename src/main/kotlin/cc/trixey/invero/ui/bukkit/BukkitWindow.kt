@@ -7,14 +7,14 @@ import cc.trixey.invero.ui.bukkit.api.unregisterWindow
 import cc.trixey.invero.ui.bukkit.nms.handler
 import cc.trixey.invero.ui.bukkit.nms.persistContainerId
 import cc.trixey.invero.ui.bukkit.nms.updateTitle
-import cc.trixey.invero.ui.bukkit.util.synced
+import cc.trixey.invero.ui.bukkit.util.runOnEntity
+import cc.trixey.invero.ui.bukkit.util.submitOnEntity
 import cc.trixey.invero.ui.common.ContainerType
 import cc.trixey.invero.ui.common.Scale
 import cc.trixey.invero.ui.common.Window
 import cc.trixey.invero.ui.common.panel.IOPanel
 import cc.trixey.invero.ui.common.util.anyInstancePanel
 import org.bukkit.entity.Player
-import taboolib.common.platform.function.submit
 import taboolib.common.platform.function.warning
 
 /**
@@ -36,7 +36,7 @@ abstract class BukkitWindow(
     override var title: String = title
         set(value) {
             field = value
-            updateTitle(field)
+            viewer.get<Player>()?.runOnEntity { updateTitle(value) }
         }
 
     final override val panels = arrayListOf<BukkitPanel>()
@@ -83,8 +83,11 @@ abstract class BukkitWindow(
     }
 
     override fun open() {
-        val player = viewer.get<Player>()
+        val player = viewer.get<Player>() ?: return
+        player.runOnEntity { openOnEntity(player) }
+    }
 
+    private fun openOnEntity(player: Player) {
         // 如果被取消
         if (preOpenCallback(this) == false) return
         // 正在查看一个 Window，则伪关闭
@@ -99,36 +102,37 @@ abstract class BukkitWindow(
             inventory.open()
             openCallback(this)
         }
-        submit(delay = 2L) {
+        player.submitOnEntity(delay = 2L) {
             invokable()
         }
     }
 
     override fun close(doCloseInventory: Boolean, updateInventory: Boolean) {
+        val player = viewer.get<Player>() ?: return
+        player.runOnEntity { closeOnEntity(player, doCloseInventory, updateInventory) }
+    }
+
+    private fun closeOnEntity(player: Player, doCloseInventory: Boolean, updateInventory: Boolean) {
         require(isRegistered()) { "Can not close an unregistered window" }
 
         preCloseCallback(this)
         unregisterWindow()
 
-        synced {
-            val player = viewer.get<Player>() ?: return@synced
+        if (doCloseInventory && isViewing()) {
+            if (virtual) handler.sendWindowClose(player, persistContainerId)
+            else player.closeInventory()
+        }
+        if (updateInventory) player.updateInventory()
 
-            if (doCloseInventory && isViewing()) {
-                if (virtual) handler.sendWindowClose(player, persistContainerId)
-                else player.closeInventory()
+        player.submitOnEntity(delay = 2L) {
+            if (findWindow(player.name) != null) return@submitOnEntity
+
+            if (anyIOPanel) {
+                storageMap.remove(player.uniqueId)
+            } else {
+                player.restorePlayerInventory()
             }
-            if (updateInventory) player.updateInventory()
-
-            submit(delay = 2L) {
-                if (findWindow(player.name) != null) return@submit
-
-                if (anyIOPanel) {
-                    storageMap.remove(player.uniqueId)
-                } else {
-                    player.restorePlayerInventory()
-                }
-                player.updateInventory()
-            }
+            player.updateInventory()
         }
 
         closeCallback(this)

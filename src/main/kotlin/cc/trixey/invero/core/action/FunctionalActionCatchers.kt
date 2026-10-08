@@ -2,9 +2,9 @@ package cc.trixey.invero.core.action
 
 import cc.trixey.invero.common.Invero
 import cc.trixey.invero.core.Context
+import cc.trixey.invero.ui.bukkit.util.submitOnEntity
 import kotlinx.serialization.Serializable
 import org.bukkit.entity.Player
-import taboolib.common.platform.function.submitAsync
 import taboolib.library.reflex.Reflex.Companion.setProperty
 import java.util.concurrent.CompletableFuture
 
@@ -53,7 +53,7 @@ class FunctionalActionCatchers(
             }
             iterator.next().run(player, context) { process(iterator) }
         }
-        submitAsync(delay = 2L) {
+        player.submitOnEntity(delay = 2L) {
             process(catchers.iterator())
         }
         return CompletableFuture.completedFuture(false)

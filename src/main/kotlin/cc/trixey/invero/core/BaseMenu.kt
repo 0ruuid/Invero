@@ -23,6 +23,7 @@ import cc.trixey.invero.ui.bukkit.InventoryVanilla
 import cc.trixey.invero.ui.bukkit.PlayerViewer
 import cc.trixey.invero.ui.bukkit.api.dsl.commonWindow
 import cc.trixey.invero.ui.bukkit.panel.CraftingPanel
+import cc.trixey.invero.ui.bukkit.util.runOnEntity
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -30,7 +31,6 @@ import kotlinx.serialization.Transient
 import kotlinx.serialization.json.JsonNames
 import kotlinx.serialization.json.JsonObject
 import org.bukkit.entity.Player
-import taboolib.common.platform.function.submitAsync
 import taboolib.library.reflex.Reflex.Companion.setProperty
 import taboolib.platform.util.giveItem
 import taboolib.platform.util.removeMeta
@@ -96,6 +96,10 @@ class BaseMenu(
      */
     override fun open(viewer: PlayerViewer, vars: Map<String, Any>) {
         val player = viewer.get<Player>() ?: return
+        player.runOnEntity { openOnEntity(viewer, player, vars) }
+    }
+
+    private fun openOnEntity(viewer: PlayerViewer, player: Player, vars: Map<String, Any>) {
 
         // 创建 UI Window
         val window = commonWindow(
@@ -126,31 +130,33 @@ class BaseMenu(
         val session = Session.register(viewer, this, window, vars)
         // 开始处理窗口开启
 
-        (events?.preOpen(session) ?: CompletableFuture.completedFuture(true)).thenApply {
-            if (!it) {
-                viewer.unregisterSession()
-                return@thenApply
-            }
-            runCatching {
-                // 开启 Window
-                // 其本身会检查是否已经打开任何 Window，并自动关闭等效旧菜单的 Window
-                window.preOpen { panels.forEach { p -> p.invoke(window, session) } }
-                window.open()
-                // 屏蔽掉频繁的交互
-                if (isVirtual())
-                    (window.inventory as InventoryPacket).onClick { _, _ -> viewer.canInteract }
-                else
-                    (window.inventory as InventoryVanilla).onClick { _ -> viewer.canInteract }
-                // 应用动态标题属性
-                settings.title.submit(session)
-                // 应用周期事件
-                tasks?.forEach { x -> x.value.submit(session) }
-                // 开启后事件动作
-                events?.postOpen(session)
-                player.setMeta("invero_menu_viewing", true)
-            }.onFailure {
-                it.prettyPrint()
-                Session.unregister(session)
+        (events?.preOpen(session) ?: CompletableFuture.completedFuture(true)).thenAccept { allowed ->
+            player.runOnEntity {
+                if (!allowed) {
+                    viewer.unregisterSession()
+                    return@runOnEntity
+                }
+                runCatching {
+                    // 开启 Window
+                    // 其本身会检查是否已经打开任何 Window，并自动关闭等效旧菜单的 Window
+                    window.preOpen { panels.forEach { p -> p.invoke(window, session) } }
+                    window.open()
+                    // 屏蔽掉频繁的交互
+                    if (isVirtual())
+                        (window.inventory as InventoryPacket).onClick { _, _ -> viewer.canInteract }
+                    else
+                        (window.inventory as InventoryVanilla).onClick { _ -> viewer.canInteract }
+                    // 应用动态标题属性
+                    settings.title.submit(session)
+                    // 应用周期事件
+                    tasks?.forEach { x -> x.value.submit(session) }
+                    // 开启后事件动作
+                    events?.postOpen(session)
+                    player.setMeta("invero_menu_viewing", true)
+                }.onFailure {
+                    it.prettyPrint()
+                    Session.unregister(session)
+                }
             }
         }
     }
@@ -164,15 +170,19 @@ class BaseMenu(
      *
      */
     override fun close(viewer: PlayerViewer, closeWindow: Boolean, closeInventory: Boolean) {
-        val session = viewer.session ?: return
         val player = viewer.get<Player>() ?: return
+        player.runOnEntity { closeOnEntity(viewer, player, closeWindow, closeInventory) }
+    }
+
+    private fun closeOnEntity(viewer: PlayerViewer, player: Player, closeWindow: Boolean, closeInventory: Boolean) {
+        val session = viewer.session ?: return
 
         if (session.menu != this) return
         viewer.unregisterSession { if (closeWindow) it.close(true, closeInventory) }
         MenuCloseEvent(player, this, session.window).also { it.call() }
         player.removeMeta("invero_menu_viewing")
 
-        submitAsync { events?.close(session) }
+        events?.close(session)
     }
 
     /**

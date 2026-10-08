@@ -5,8 +5,9 @@ import cc.trixey.invero.common.api.InveroSettings
 import cc.trixey.invero.core.BaseMenu
 import cc.trixey.invero.core.menu.NodeRunnable
 import cc.trixey.invero.core.script.session
-import taboolib.common.platform.function.submitAsync
 import cc.trixey.invero.core.script.loader.InveroKetherParser
+import cc.trixey.invero.ui.bukkit.util.runOnEntity
+import org.bukkit.entity.Player
 import taboolib.module.kether.combinationParser
 import java.util.concurrent.CompletableFuture
 
@@ -61,9 +62,15 @@ object ActionInvokeNode {
                 val task = menu.tasks?.get(name)
                     ?: return@future CompletableFuture.completedFuture("<TASK: $name> ${menu.nodes?.keys}")
 
-                CompletableFuture.completedFuture(submitAsync {
-                    task.run(session, params)
-                })
+                val result = CompletableFuture<Any?>()
+                val player = session.viewer.get<Player>()
+                    ?: return@future CompletableFuture.completedFuture(false)
+                player.runOnEntity {
+                    runCatching { task.run(session, params) }
+                        .onSuccess { result.complete(true) }
+                        .onFailure { result.completeExceptionally(it) }
+                }
+                result
             }
         }
     }

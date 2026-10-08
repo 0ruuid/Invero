@@ -5,13 +5,13 @@ package cc.trixey.invero.core.action
 import cc.trixey.invero.common.Invero
 import cc.trixey.invero.core.Context
 import cc.trixey.invero.core.serialize.ListStringSerializer
+import cc.trixey.invero.ui.bukkit.util.submitOnEntity
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNames
 import org.bukkit.entity.Player
-import taboolib.common.platform.function.submitAsync
 import java.util.concurrent.CompletableFuture
 
 /**
@@ -47,7 +47,7 @@ class FunctionalActionCatcher(
         // close window
         session.menu.close(player)
         // input
-        submitAsync(delay = 2L) {
+        player.submitOnEntity(delay = 2L) {
             inputCatcher.run(player, context) {
                 val pass = context.variables.filterNot { it.key.startsWith("@") }
                 if (reopen && menu != null)

@@ -1,8 +1,12 @@
 package cc.trixey.invero.core.script
 
 import cc.trixey.invero.core.script.loader.InveroKetherParser
+import cc.trixey.invero.core.script.override.ActionCommand
+import cc.trixey.invero.ui.bukkit.util.FoliaRuntime
+import cc.trixey.invero.ui.bukkit.util.runOnEntity
 import taboolib.common.platform.function.console
 import taboolib.module.kether.combinationParser
+import java.util.concurrent.CompletableFuture
 
 /**
  * Invero
@@ -24,19 +28,25 @@ internal fun chance() = combinationParser {
 @InveroKetherParser(["playerPerform"])
 internal fun command() = combinationParser {
     it.group(action()).apply(it) { s ->
-        now {
-            newFrame(s).run<Any>().getNow(null)?.toString()?.let {
-                player().performCommand(it)
-            }
-        }
+        future { ActionCommand(s, ActionCommand.Type.PLAYER).run(this) }
     }
 }
 
 @InveroKetherParser(["console"])
 internal fun actionConsole() = combinationParser {
     it.group(text()).apply(it) { s ->
-        now {
-            console().performCommand(parse(s))
+        future {
+            val future = CompletableFuture<Any?>()
+            val player = player()
+            val command = parse(s)
+            FoliaRuntime.runGlobal {
+                runCatching { console().performCommand(command) }
+                    .fold(
+                        { player.runOnEntity { future.complete(it) } },
+                        { player.runOnEntity { future.completeExceptionally(it) } }
+                    )
+            }
+            future
         }
     }
 }

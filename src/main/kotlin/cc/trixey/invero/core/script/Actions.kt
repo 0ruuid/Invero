@@ -5,6 +5,9 @@ import cc.trixey.invero.core.compat.bungeecord.Bungees
 import cc.trixey.invero.core.compat.eco.HookPlayerPoints
 import cc.trixey.invero.core.script.loader.InveroKetherParser
 import cc.trixey.invero.common.message.translateFormattedMessage
+import cc.trixey.invero.ui.bukkit.util.FoliaRuntime
+import cc.trixey.invero.ui.bukkit.util.runOnEntity
+import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import taboolib.common5.cdouble
 import taboolib.common5.cint
@@ -13,7 +16,6 @@ import taboolib.module.kether.*
 import taboolib.platform.compat.depositBalance
 import taboolib.platform.compat.getBalance
 import taboolib.platform.compat.withdrawBalance
-import taboolib.platform.util.onlinePlayers
 import java.util.concurrent.CompletableFuture
 import kotlin.math.max
 import kotlin.math.min
@@ -48,17 +50,19 @@ internal fun actionConnect() = combinationParser {
         command("for", then = action()).option().defaultsTo(null)
     ).apply(it) { server, player ->
         future {
+            val result = CompletableFuture<Any?>()
             if (player == null) {
-                (session()?.viewer?.get<Player>()
-                    ?: player()).let { player -> CompletableFuture.completedFuture(Bungees.connect(player, server)) }
-                    ?: CompletableFuture.completedFuture(null)
+                val target = session()?.viewer?.get<Player>() ?: player()
+                target.runOnEntity { result.complete(Bungees.connect(target, server)) }
             } else {
-                newFrame(player).run<Any>().thenApply { playerId ->
-                    onlinePlayers
-                        .find { p -> p.name == playerId }
-                        ?.let { p -> Bungees.connect(p, server) }
+                newFrame(player).run<Any>().thenAccept { playerId ->
+                    FoliaRuntime.supplyGlobal { Bukkit.getPlayerExact(playerId.toString()) }.thenAccept { target ->
+                        if (target == null) result.complete(null)
+                        else target.runOnEntity { result.complete(Bungees.connect(target, server)) }
+                    }
                 }
             }
+            result
         }
     }
 }

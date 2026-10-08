@@ -7,7 +7,8 @@ import cc.trixey.invero.core.script.contextVar
 import cc.trixey.invero.core.script.loader.InveroKetherParser
 import cc.trixey.invero.core.script.parse
 import cc.trixey.invero.core.script.player
-import taboolib.common.platform.function.onlinePlayers
+import cc.trixey.invero.ui.bukkit.util.runOnEntity
+import org.bukkit.Bukkit
 import taboolib.module.kether.combinationParser
 
 /**
@@ -49,6 +50,11 @@ fun actionTellFluentMessage() = combinationParser {
 @InveroKetherParser(["broadcast", "bc"], tags = ["kether-ext"])
 fun actionBroadcast() = combinationParser {
     it.group(text()).apply(it) { str ->
-        now { onlinePlayers().forEach { p -> p.sendMessage(parse(str)) } }
+        now {
+            val message = parse(str)
+            Bukkit.getOnlinePlayers().forEach { player ->
+                player.runOnEntity { player.sendMessage(message) }
+            }
+        }
     }
 }

@@ -2,6 +2,7 @@ package cc.trixey.invero.core.menu
 
 import cc.trixey.invero.core.Session
 import cc.trixey.invero.core.serialize.ListNodeSerializer
+import cc.trixey.invero.ui.bukkit.util.FoliaRuntime
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -23,7 +24,8 @@ class MenuTask(
 ) {
 
     fun submit(session: Session) {
-        session.taskGroup.launch(async = async ?: true, delay = delay ?: 0L, period = period ?: 0L) {
+        val runAsync = (async ?: true) && !FoliaRuntime.isFolia
+        session.taskGroup.launch(async = runAsync, delay = delay ?: 0L, period = period ?: 0L) {
             run(session)
         }
     }

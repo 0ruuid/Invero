@@ -19,6 +19,7 @@ import cc.trixey.invero.core.panel.PanelStandard
 import cc.trixey.invero.core.serialize.BaseMenuSerializer
 import cc.trixey.invero.core.serialize.hocon.PatchedLoader
 import cc.trixey.invero.core.util.session
+import cc.trixey.invero.ui.bukkit.util.FoliaRuntime
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.modules.SerializersModule
@@ -31,7 +32,6 @@ import taboolib.common.platform.Awake
 import taboolib.common.platform.PlatformFactory
 import taboolib.common.platform.function.console
 import taboolib.common.platform.function.getJarFile
-import taboolib.common.platform.function.submit
 import taboolib.common.platform.function.submitAsync
 import taboolib.common5.FileWatcher
 import taboolib.module.configuration.Configuration
@@ -200,15 +200,15 @@ class DefaultMenuManager : InveroMenuManager {
                     it.prettyPrint()
                     console().sendLang("menu-loader-auto-reload-errored", menuId)
                 }.getOrNull()?.let { loaded ->
-                    val viewers = onlinePlayers.filter { it.session?.menu?.id == menuId }
-                    // replace in memory
-                    menus[menuId]?.apply {
-                        viewers.forEach { close(it, false, closeInventory = false) }
-                        unregister()
-                    }
-                    menus[menuId] = loaded
-                    alert { loaded.register() }
-                    submit {
+                    FoliaRuntime.runGlobal {
+                        val viewers = onlinePlayers.filter { it.session?.menu?.id == menuId }
+                        // replace in memory
+                        menus[menuId]?.apply {
+                            viewers.forEach { close(it, false, closeInventory = false) }
+                            unregister()
+                        }
+                        menus[menuId] = loaded
+                        alert { loaded.register() }
                         console().sendLang("menu-loader-auto-reload-successed", menuId)
                         viewers.forEach {
                             loaded.open(player = it, vars = it.session?.getVariables() ?: emptyMap())

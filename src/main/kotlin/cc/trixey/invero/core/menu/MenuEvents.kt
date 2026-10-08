@@ -8,7 +8,6 @@ import cc.trixey.invero.core.action.Action
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonNames
-import taboolib.common.platform.function.submitAsync
 import java.util.concurrent.CompletableFuture
 
 /**
@@ -45,7 +44,7 @@ class MenuEvents(
     /**
      * Async
      */
-    fun close(session: Session) = submitAsync {
+    fun close(session: Session) {
         if (session.viewer.isAvailable()) {
             close?.run(Context(session.viewer, session))
         }

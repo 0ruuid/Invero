@@ -5,11 +5,11 @@ import cc.trixey.invero.ui.bukkit.InventoryPacket
 import cc.trixey.invero.ui.bukkit.InventoryVanilla
 import cc.trixey.invero.ui.bukkit.PlayerViewer
 import cc.trixey.invero.ui.bukkit.api.notViewingWindow
+import cc.trixey.invero.ui.bukkit.util.submitOnEntity
 import dev.lone.itemsadder.api.FontImages.FontImageWrapper
 import io.netty.util.internal.ConcurrentSet
 import org.bukkit.entity.Player
 import org.bukkit.event.inventory.InventoryType
-import taboolib.common.platform.function.submitAsync
 import taboolib.common.util.unsafeLazy
 import taboolib.library.reflex.Reflex.Companion.setProperty
 import taboolib.module.nms.MinecraftVersion.isUnobfuscated
@@ -48,10 +48,10 @@ fun PlayerViewer.isTitleUpdating(): Boolean {
 }
 
 fun BukkitWindow.updateTitle(title: String, updateInventory: Boolean = true) {
+    val player = viewer.get<Player>() ?: return
     if (viewer.isTitleUpdating()) return
     else viewer.setTitleUpdating()
 
-    val player = viewer.get<Player>() ?: return
     val id = inventory.containerId
     val replaced = runCatching { FontImageWrapper.replaceFontImages(player, title) }.getOrNull() ?: title
 
@@ -63,7 +63,7 @@ fun BukkitWindow.updateTitle(title: String, updateInventory: Boolean = true) {
     }
 
     // 补刀
-    submitAsync(delay = 2L) {
+    player.submitOnEntity(delay = 2L) {
         if (viewer.notViewingWindow() && player.openInventory.topInventory.type == InventoryType.CRAFTING) {
             handler.sendWindowClose(player, id)
         }

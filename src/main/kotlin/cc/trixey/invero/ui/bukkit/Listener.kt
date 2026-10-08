@@ -5,6 +5,7 @@ import cc.trixey.invero.ui.bukkit.api.findWindow
 import cc.trixey.invero.ui.bukkit.nms.persistContainerId
 import cc.trixey.invero.ui.bukkit.nms.sendCancelCoursor
 import cc.trixey.invero.ui.bukkit.util.copyUIMarked
+import cc.trixey.invero.ui.bukkit.util.scheduleOnEntity
 import cc.trixey.invero.ui.common.event.ClickType
 import org.bukkit.Material
 import org.bukkit.entity.Player
@@ -20,7 +21,6 @@ import org.bukkit.inventory.ItemStack
 import taboolib.common.LifeCycle
 import taboolib.common.platform.Awake
 import taboolib.common.platform.event.SubscribeEvent
-import taboolib.common.platform.function.submit
 import taboolib.library.reflex.Reflex.Companion.invokeMethod
 import taboolib.module.nms.MinecraftVersion
 import taboolib.module.nms.MinecraftVersion.isUniversal
@@ -143,11 +143,12 @@ object Listener {
         val packet = e.packet
 
         when (packet.name) {
-            "PacketPlayInCloseWindow" -> {
+            "PacketPlayInCloseWindow", "ServerboundContainerClosePacket" -> {
                 val id = packet.read<Int>(FIELD_CONTAINER_ID) ?: return
                 if (id == persistContainerId) {
-                    val window = viewer.viewingPacketWindow() ?: return
-                    submit { window.close(doCloseInventory = false, updateInventory = true) }
+                    player.scheduleOnEntity {
+                        viewer.viewingPacketWindow()?.close(doCloseInventory = false, updateInventory = true)
+                    }
                 }
             }
 
@@ -155,29 +156,29 @@ object Listener {
                 val inventory = viewer.viewingWindow()?.inventory ?: return
 
                 if (inventory is InventoryVanilla) {
-                    player.sendCancelCoursor()
-                    submit { inventory.updatePlayerInventory() }
+                    player.scheduleOnEntity {
+                        player.sendCancelCoursor()
+                        (viewer.viewingWindow()?.inventory as? InventoryVanilla)?.updatePlayerInventory()
+                    }
                     return
-                } else {
-                    packet.read<Int>(FILEDS_WINDOW_CLICK[0]).let { if (it != persistContainerId) return }
-                    inventory as InventoryPacket
-                    // 尝试在虚拟菜单取消收包，阻止校验
-                    if (MinecraftVersion.versionId >= 12102) e.isCancelled = false
                 }
+
+                packet.read<Int>(FILEDS_WINDOW_CLICK[0]).let { if (it != persistContainerId) return }
+                // 尝试在虚拟菜单取消收包，阻止校验
+                if (MinecraftVersion.versionId >= 12102) e.isCancelled = false
 
                 val rawSlot = packet.read<Number>(FILEDS_WINDOW_CLICK[1])?.toInt() ?: return
                 val button = packet.read<Number>(FILEDS_WINDOW_CLICK[2])?.toInt() ?: return
                 val mode = ClickType.Mode.valueOf(packet.read<Any>(FILEDS_WINDOW_CLICK[3]).toString())
                 val type = ClickType.find(mode, button, rawSlot) ?: return
 
-
-                if (rawSlot >= 0) {
-                    player.sendCancelCoursor()
-                    inventory.update(rawSlot)
-                }
-
-                submit {
-                    inventory.handleClickEvent(rawSlot, type)
+                player.scheduleOnEntity {
+                    val current = viewer.viewingWindow()?.inventory as? InventoryPacket ?: return@scheduleOnEntity
+                    if (rawSlot >= 0) {
+                        player.sendCancelCoursor()
+                        current.update(rawSlot)
+                    }
+                    current.handleClickEvent(rawSlot, type)
                 }
             }
         }

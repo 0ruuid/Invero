@@ -1,11 +1,13 @@
 package cc.trixey.invero.common
 
 import org.bukkit.Bukkit
+import cc.trixey.invero.ui.bukkit.PlayerViewer
+import cc.trixey.invero.ui.bukkit.util.submitOnEntity
 import taboolib.common.LifeCycle
 import taboolib.common.platform.Awake
 import taboolib.common.platform.function.submit
 import taboolib.common.platform.service.PlatformExecutor
-import taboolib.platform.BukkitExecutor
+import taboolib.platform.Folia
 import taboolib.platform.util.bukkitPlugin
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArraySet
@@ -17,12 +19,14 @@ import java.util.concurrent.CopyOnWriteArraySet
  * @author Arasple
  * @since 2023/1/16 12:14
  */
-class TaskGroup(private val platformTasks: CopyOnWriteArraySet<PlatformExecutor.PlatformTask> = CopyOnWriteArraySet()) {
+class TaskGroup(
+    private val viewer: PlayerViewer,
+    private val platformTasks: CopyOnWriteArraySet<PlatformExecutor.PlatformTask> = CopyOnWriteArraySet()
+) {
 
     fun unregisterAll() {
         platformTasks.removeIf {
-            it as BukkitExecutor.BukkitPlatformTask
-                it.cancel()
+            it.cancel()
             true
         }
     }
@@ -34,15 +38,14 @@ class TaskGroup(private val platformTasks: CopyOnWriteArraySet<PlatformExecutor.
         period: Long = 0,
         executor: (task: PlatformExecutor.PlatformTask) -> Unit,
     ) {
-        submit(now, async, delay, period, executor).also { this += it }
+        val task = if (async) {
+            submit(now, true, delay, period, executor)
+        } else {
+            val player = viewer.get<org.bukkit.entity.Player>() ?: return
+            player.submitOnEntity(delay, period, executor)
+        }
+        this += task
     }
-
-    fun launchAsync(
-        now: Boolean = false,
-        delay: Long = 0,
-        period: Long = 0,
-        executor: (task: PlatformExecutor.PlatformTask) -> Unit,
-    ) = launch(now, true, delay, period, executor)
 
     operator fun plusAssign(task: PlatformExecutor.PlatformTask) {
         platformTasks += task
@@ -56,18 +59,20 @@ class TaskGroup(private val platformTasks: CopyOnWriteArraySet<PlatformExecutor.
 
         private val taskMgrs = ConcurrentHashMap<String, TaskGroup>()
 
-        fun get(key: String): TaskGroup {
-            return taskMgrs.computeIfAbsent(key) { TaskGroup() }
+        fun get(viewer: PlayerViewer): TaskGroup {
+            return taskMgrs.computeIfAbsent(viewer.name) { TaskGroup(viewer) }
         }
 
         @Awake(LifeCycle.DISABLE)
         fun unregister() {
             taskMgrs.values.forEach { it.unregisterAll() }
 
-            Bukkit.getScheduler().apply {
-                pendingTasks
-                    .filter { it.owner == bukkitPlugin && !it.isCancelled }
-                    .forEach { it.cancel() }
+            if (!Folia.isFolia) {
+                Bukkit.getScheduler().apply {
+                    pendingTasks
+                        .filter { it.owner == bukkitPlugin && !it.isCancelled }
+                        .forEach { it.cancel() }
+                }
             }
         }
 

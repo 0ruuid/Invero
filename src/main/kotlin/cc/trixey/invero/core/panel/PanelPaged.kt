@@ -16,7 +16,6 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonNames
-import taboolib.common.platform.function.submitAsync
 
 /**
  * Invero
@@ -50,7 +49,7 @@ class PanelPaged(
             pages.map { it.invoke(this, session) }
 
             // 临时补丁：页码变量初始化
-            submitAsync {
+            session.taskGroup.launch {
                 if (parent.isPanelValid(this@pagedNetesed)) {
                     (currentPanel as? ElementalPanel)
                         ?.elements

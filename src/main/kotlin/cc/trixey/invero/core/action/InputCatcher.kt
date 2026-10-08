@@ -6,6 +6,7 @@ import cc.trixey.invero.core.Context
 import cc.trixey.invero.core.action.InputCatcher.Type.CHAT
 import cc.trixey.invero.core.action.InputCatcher.Type.SIGN
 import cc.trixey.invero.core.serialize.ListStringSerializer
+import cc.trixey.invero.ui.bukkit.util.runOnEntity
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
@@ -53,7 +54,8 @@ class InputCatcher(
         player.cancelNextChat(execute = false)
         when (type) {
             CHAT -> player.nextChat {
-                it.contentResponse(player, context, repeat, onComplete)
+                val content = it
+                player.runOnEntity { content.contentResponse(player, context, repeat, onComplete) }
             }
 
             SIGN -> player.inputSign(context.parse(signContent).toTypedArray()) {
@@ -62,7 +64,7 @@ class InputCatcher(
                 } else {
                     it[signLine.coerceIn(0..it.lastIndex)]
                 }
-                content.contentResponse(player, context, repeat, onComplete)
+                player.runOnEntity { content.contentResponse(player, context, repeat, onComplete) }
             }
         }
     }

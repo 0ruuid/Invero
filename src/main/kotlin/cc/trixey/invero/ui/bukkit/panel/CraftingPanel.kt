@@ -4,6 +4,7 @@ import cc.trixey.invero.ui.bukkit.PanelContainer
 import cc.trixey.invero.ui.bukkit.ProxyBukkitInventory
 import cc.trixey.invero.ui.bukkit.util.clickType
 import cc.trixey.invero.ui.bukkit.util.reachedMaxStackSize
+import cc.trixey.invero.ui.bukkit.util.runOnEntity
 import cc.trixey.invero.ui.common.Pos
 import cc.trixey.invero.ui.common.Scale
 import cc.trixey.invero.ui.common.event.ClickType
@@ -14,7 +15,6 @@ import cc.trixey.invero.ui.common.util.locatingAbsoluteSlot
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.event.inventory.InventoryDragEvent
 import org.bukkit.inventory.ItemStack
-import taboolib.common.platform.function.submit
 import taboolib.platform.util.isAir
 import java.util.concurrent.ConcurrentHashMap
 
@@ -71,7 +71,7 @@ class CraftingPanel(
             // cancel event & run callbacks
             e.isCancelled = false
             // update storage
-            submit {
+            window.viewer.get<org.bukkit.entity.Player>()?.runOnEntity {
                 (freeSlots + storage.keys).distinct().forEach {
                     inventory[locatingAbsoluteSlot(it)].storeAt(it)
                 }
@@ -94,7 +94,7 @@ class CraftingPanel(
 
         // 事件结束后统一回读 GUI 槽位，确保存储与界面一致
         // 支持拖入与取出
-        submit {
+        window.viewer.get<org.bukkit.entity.Player>()?.runOnEntity {
             (freeSlots + storage.keys).distinct().forEach {
                 inventory[locatingAbsoluteSlot(it)].storeAt(it)
             }
@@ -112,7 +112,7 @@ class CraftingPanel(
 
         e.isCancelled = false
 
-        submit {
+        window.viewer.get<org.bukkit.entity.Player>()?.runOnEntity {
             inventory[locatingAbsoluteSlot(pos)].storeAt(slot)
             runCallback()
         }

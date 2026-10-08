@@ -1,7 +1,9 @@
 package cc.trixey.invero.ui.bukkit.element.item
 
+import cc.trixey.invero.ui.bukkit.util.runOnEntity
 import cc.trixey.invero.ui.common.Panel
 import cc.trixey.invero.ui.common.Viewer
+import org.bukkit.entity.Player
 import org.bukkit.Material
 import org.bukkit.inventory.ItemStack
 import taboolib.common.platform.function.submitAsync
@@ -37,11 +39,17 @@ open class SimpleItem(panel: Panel, value: ItemStack = ItemStack(Material.AIR)) 
     }
 
     override fun buildAsync(supplier: Supplier<ItemStack>) {
-        submitAsync { itemStack = supplier.get() }
+        submitAsync {
+            val built = supplier.get()
+            panel.window.viewer.get<Player>()?.runOnEntity { itemStack = built }
+        }
     }
 
     override fun buildFuture(completable: CompletableFuture<ItemStack>, timeout: Long) {
-        submitAsync { itemStack = completable.get(timeout, TimeUnit.MILLISECONDS) }
+        submitAsync {
+            val built = completable.get(timeout, TimeUnit.MILLISECONDS)
+            panel.window.viewer.get<Player>()?.runOnEntity { itemStack = built }
+        }
     }
 
     override fun getInstance(): SimpleItem {

@@ -53,11 +53,11 @@ class MenuTitle(
             .toCyclic(type ?: CycleMode.LOOP)
 
         fun loop(delay: Long) {
-            session.taskGroup.launchAsync(delay = delay) {
-                if (session != session.viewer.session) return@launchAsync
+            session.taskGroup.launch(delay = delay) {
+                if (session != session.viewer.session) return@launch
                 if (session.hasVariable("title_task_running")) {
                     loop(20)
-                    return@launchAsync
+                    return@launch
                 }
                 cyclic.getAndCycle().apply {
                     session.window.title = if (preGenerate != false) value else session.parse(value)

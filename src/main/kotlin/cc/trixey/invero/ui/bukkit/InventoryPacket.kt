@@ -2,11 +2,12 @@ package cc.trixey.invero.ui.bukkit
 
 import cc.trixey.invero.ui.bukkit.nms.handler
 import cc.trixey.invero.ui.bukkit.nms.persistContainerId
+import cc.trixey.invero.ui.bukkit.util.runOnEntity
+import cc.trixey.invero.ui.bukkit.util.submitOnEntity
 import cc.trixey.invero.ui.common.event.ClickType
 import dev.lone.itemsadder.api.FontImages.FontImageWrapper
 import org.bukkit.inventory.ItemStack
 import taboolib.common.platform.function.info
-import taboolib.common.platform.function.submitAsync
 
 /**
  * Invero
@@ -71,12 +72,15 @@ class InventoryPacket(override val window: BukkitWindow) : ProxyBukkitInventory 
     }
 
     override fun set(slot: Int, itemStack: ItemStack?) {
-        try {
-            windowItems[slot] = itemStack
-        } catch (e: Throwable) {
-            info("Failed to set slot $slot to $itemStack")
+        val viewer = viewer ?: return
+        viewer.runOnEntity {
+            try {
+                windowItems[slot] = itemStack
+            } catch (e: Throwable) {
+                info("Failed to set slot $slot to $itemStack")
+            }
+            update(slot)
         }
-        update(slot)
     }
 
     override fun isViewing(): Boolean {
@@ -99,10 +103,10 @@ class InventoryPacket(override val window: BukkitWindow) : ProxyBukkitInventory 
 
         // temp
         if (!hidePlayerInventory) {
-            submitAsync(delay = 10L, period = 20L) {
+            viewer.submitOnEntity(delay = 10L, period = 20L) {
                 if (!window.isViewing()) {
                     cancel()
-                    return@submitAsync
+                    return@submitOnEntity
                 }
                 updatePlayerItems(true)
             }

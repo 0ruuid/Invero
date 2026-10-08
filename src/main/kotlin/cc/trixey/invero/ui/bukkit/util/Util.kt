@@ -1,7 +1,5 @@
 package cc.trixey.invero.ui.bukkit.util
 
-import taboolib.common.platform.function.isPrimaryThread
-import taboolib.common.platform.function.submit
 import java.net.URL
 
 /**
@@ -20,8 +18,7 @@ fun fromURL(url: String): String {
 }
 
 inline fun synced(crossinline block: () -> Unit) {
-    if (isPrimaryThread) block()
-    else submit { block() }
+    FoliaRuntime.runGlobal { block() }
 }
 
 fun Boolean.proceed(block: () -> Unit): Boolean {

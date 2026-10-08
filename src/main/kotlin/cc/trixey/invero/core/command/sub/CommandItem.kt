@@ -4,6 +4,7 @@ import cc.trixey.invero.common.util.*
 import cc.trixey.invero.common.util.PasteResult.Status.ERROR
 import cc.trixey.invero.common.util.PasteResult.Status.SUCCESS
 import cc.trixey.invero.core.serialize.ItemStackJsonSerializer
+import cc.trixey.invero.ui.bukkit.util.runOnEntity
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -75,14 +76,13 @@ object CommandItem {
             player.sendLang("item-air")
             return
         }
-        this!!
+        val item = this!!.clone()
+        player.sendLang("paste-init")
 
         submitAsync {
-            player.sendLang("paste-init")
-
-            val serialized = Json.encodeToJsonElement(ItemStackJsonSerializer, this@postItemSerialization).jsonObject.reduceEmpty()
+            val serialized = Json.encodeToJsonElement(ItemStackJsonSerializer, item).jsonObject.reduceEmpty()
             val view = createContent("Structure View", prettyJson.encodeToString(serialized), "JSON")
-            val valueBase64 = Base64.getEncoder().encodeToString(serializeToByteArray())
+            val valueBase64 = Base64.getEncoder().encodeToString(item.serializeToByteArray())
             val valueJson = standardJson.encodeToString(serialized)
             val base64 = createContent("Format Base64", valueBase64)
             val json = createContent("Format Json", valueJson, "JSON")
@@ -94,7 +94,7 @@ object CommandItem {
                 info(valueJson)
             }
 
-            paste(
+            val result = paste(
                 "Invero Item Serialization",
                 "item serialized to json & base64 format",
                 48,
@@ -102,9 +102,10 @@ object CommandItem {
                 view,
                 base64,
                 json
-            ).apply {
-                when (status) {
-                    SUCCESS -> player.sendLang("paste-success", anonymousLink)
+            )
+            player.runOnEntity {
+                when (result.status) {
+                    SUCCESS -> player.sendLang("paste-success", result.anonymousLink)
                     ERROR -> player.sendLang("paste-failed")
                 }
             }

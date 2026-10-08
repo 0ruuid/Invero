@@ -7,7 +7,8 @@ import cc.trixey.invero.ui.bukkit.nms.handler
 import cc.trixey.invero.ui.bukkit.nms.updateTitle
 import cc.trixey.invero.ui.bukkit.panel.CraftingPanel
 import cc.trixey.invero.ui.bukkit.util.clickType
-import cc.trixey.invero.ui.bukkit.util.synced
+import cc.trixey.invero.ui.bukkit.util.runOnEntity
+import cc.trixey.invero.ui.bukkit.util.submitOnEntity
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.event.inventory.*
@@ -15,9 +16,7 @@ import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.InventoryHolder
 import org.bukkit.inventory.InventoryView
 import org.bukkit.inventory.ItemStack
-import taboolib.common.platform.function.submit
-import taboolib.common.platform.function.submitAsync
-import taboolib.platform.BukkitExecutor
+import taboolib.common.platform.service.PlatformExecutor
 
 /**
  * Invero
@@ -28,8 +27,7 @@ import taboolib.platform.BukkitExecutor
  */
 class InventoryVanilla(override val window: BukkitWindow) : ProxyBukkitInventory {
 
-    // 使用 TabooLib 的异步任务替代协程
-    private var updateTask: BukkitExecutor.BukkitPlatformTask? = null
+    private var updateTask: PlatformExecutor.PlatformTask? = null
 
     val container: Inventory = if (containerType.isOrdinaryChest)
         Bukkit.createInventory(Holder(window), containerType.containerSize, inventoryTitle)
@@ -77,25 +75,16 @@ class InventoryVanilla(override val window: BukkitWindow) : ProxyBukkitInventory
 
         if (!hidePlayerInventory || window.anyIOPanel) return
 
-        // 使用 TabooLib 异步任务处理物品栏更新，避免主线程阻塞
-        submit(async = true) {
-            try {
-                val itemsToUpdate = if (slots.isEmpty()) {
-                    playerInventoryItems
-                        .mapIndexed { index, itemStack -> (index + containerSize) to itemStack }
-                        .toMap()
-                } else {
-                    slots.map { containerSize + it to playerInventoryItems[it] }.toMap()
-                }
-
-                // 使用taboolib的同步任务回到主线程
-                submit {
-                    if (viewer.isOnline && isViewing()) {
-                        handler.sendWindowSetSlots(viewer, containerId, itemsToUpdate)
-                    }
-                }
-            } catch (e: Exception) {
-                // 异常处理
+        viewer.runOnEntity {
+            val itemsToUpdate = if (slots.isEmpty()) {
+                playerInventoryItems
+                    .mapIndexed { index, itemStack -> (index + containerSize) to itemStack }
+                    .toMap()
+            } else {
+                slots.map { containerSize + it to playerInventoryItems[it] }.toMap()
+            }
+            if (viewer.isOnline && isViewing()) {
+                handler.sendWindowSetSlots(viewer, containerId, itemsToUpdate)
             }
         }
     }
@@ -133,19 +122,14 @@ class InventoryVanilla(override val window: BukkitWindow) : ProxyBukkitInventory
     }
 
     override fun set(slot: Int, itemStack: ItemStack?) {
-        synced {
+        val viewer = viewer ?: return
+        viewer.runOnEntity {
             if (slot >= containerSize) {
                 playerInventoryItems[slot - containerSize] = itemStack
-                // 异步处理玩家物品栏更新
-                submitAsync {
-                    updatePlayerInventory(slot - containerSize)
-                }
+                updatePlayerInventory(slot - containerSize)
             } else {
                 container.setItem(slot, itemStack)
-                // 异步处理更新
-                submitAsync {
-                    updatePlayerInventory()
-                }
+                updatePlayerInventory()
             }
         }
     }
@@ -166,10 +150,10 @@ class InventoryVanilla(override val window: BukkitWindow) : ProxyBukkitInventory
 
         // 使用 TabooLib 定时任务定期更新玩家物品栏，减少更新频率
         if (!hidePlayerInventory && !window.anyIOPanel) {
-            updateTask = submit(async = false, delay = 20L, period = 20L) {
+            updateTask = viewer.submitOnEntity(delay = 20L, period = 20L) {
                 if (!window.isViewing()) {
-                    updateTask?.cancel()
-                    return@submit
+                    cancel()
+                    return@submitOnEntity
                 }
 
                 // 获取并更新物品
@@ -179,7 +163,7 @@ class InventoryVanilla(override val window: BukkitWindow) : ProxyBukkitInventory
                         playerInventoryItems = items
                     }
                 }
-            } as BukkitExecutor.BukkitPlatformTask
+            }
         }
     }
 
@@ -242,6 +226,7 @@ class InventoryVanilla(override val window: BukkitWindow) : ProxyBukkitInventory
         // 默认取消
         e.isCancelled = true
         if (!collectCallback(e)) return
+        val player = viewer ?: return
 
         val slot = e.rawSlot
         // playerInventory -> IO Panel
@@ -260,8 +245,7 @@ class InventoryVanilla(override val window: BukkitWindow) : ProxyBukkitInventory
                     insertItem.amount = result
 
                     if (previous != result) {
-                        // 异步处理渲染
-                        submitAsync {
+                        player.runOnEntity {
                             it.renderStorage()
                             it.runCallback()
                         }

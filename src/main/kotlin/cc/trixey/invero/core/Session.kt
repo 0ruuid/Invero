@@ -9,7 +9,6 @@ import cc.trixey.invero.common.message.translateFormattedMessage
 import cc.trixey.invero.ui.bukkit.BukkitWindow
 import cc.trixey.invero.ui.bukkit.PlayerViewer
 import org.bukkit.entity.Player
-import taboolib.common.platform.function.submit
 import taboolib.common.platform.function.submitAsync
 import taboolib.expansion.getDataContainer
 import java.util.concurrent.ConcurrentHashMap
@@ -33,7 +32,7 @@ class Session(
     private val variables: ConcurrentHashMap<String, Any> = ConcurrentHashMap(variables)
 
     val taskGroup: TaskGroup
-        get() = TaskGroup.get(viewer.name)
+        get() = TaskGroup.get(viewer)
 
     init {
         updateVariables()
@@ -98,7 +97,7 @@ class Session(
 
     fun pauseAnimatedTitle(last: Long = -1L) {
         setVariable("title_task_running", false)
-        if (last > 0) submit(delay = last) { resumeAnimatedTitle() }
+        if (last > 0) taskGroup.launch(delay = last) { resumeAnimatedTitle() }
     }
 
     fun resumeAnimatedTitle() = removeVariable("title_task_running")
@@ -121,7 +120,7 @@ class Session(
             sessions.remove(session.viewer.name, session)
             session.taskGroup.unregisterAll()
             val viewer = session.viewer
-            submitAsync(delay = 40L) { if (viewer.session == null) TaskGroup.get(viewer.name).unregisterAll() }
+            submitAsync(delay = 40L) { if (viewer.session == null) TaskGroup.get(viewer).unregisterAll() }
         }
 
         val String.varType: VarType

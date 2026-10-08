@@ -3,15 +3,20 @@
 package cc.trixey.invero.core.panel
 
 import cc.trixey.invero.common.Object
+import cc.trixey.invero.common.AsyncElementGenerator
+import cc.trixey.invero.common.ElementGenerator
+import cc.trixey.invero.common.util.prettyPrint
 import cc.trixey.invero.core.*
 import cc.trixey.invero.core.icon.Icon
 import cc.trixey.invero.core.serialize.MappedIconSerializer
 import cc.trixey.invero.core.serialize.PosSerializer
 import cc.trixey.invero.core.serialize.ScaleSerializer
 import cc.trixey.invero.core.util.KetherHandler
+import cc.trixey.invero.core.util.session
 import cc.trixey.invero.ui.bukkit.PanelContainer
 import cc.trixey.invero.ui.bukkit.api.dsl.generatorPaged
 import cc.trixey.invero.ui.bukkit.panel.PagedGeneratorPanel
+import cc.trixey.invero.ui.bukkit.util.FoliaRuntime
 import cc.trixey.invero.ui.common.Pos
 import cc.trixey.invero.ui.common.Scale
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -20,8 +25,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotlinx.serialization.json.JsonNames
 import org.bukkit.entity.Player
-import taboolib.common.platform.function.submit
 import taboolib.common5.cbool
+import java.util.concurrent.CompletableFuture
 
 /**
  * Invero
@@ -65,32 +70,31 @@ class PanelGenerator(
                 filter(session, this@generatorPaged, settings.filter)
                 session.setVariable("@raw_filter", settings.filter)
             }
-            // 应用元素
-            generatorSource {
-                generate(session)
-            }
+            generatorSource { emptyList() }
             // 生成输出
             generatorOutput {
                 settings.output.invoke(session, this@PanelGenerator, this, (it as Object).variables)
             }
-            // 渲染
-            submit(delay = 1L) {
-                // 渲染默认图标
-                def.forEach {
-                    it.relocate()
-                    it.render()
+            generate(session).whenComplete { generated, throwable ->
+                session.taskGroup.launch {
+                    if (session != session.viewer.session) return@launch
+                    if (throwable != null) {
+                        throwable.prettyPrint()
+                        return@launch
+                    }
+                    generatorSource { generated }
+                    def.forEach {
+                        it.relocate()
+                        it.render()
+                    }
+                    render()
+                    session.taskGroup.launch(delay = 2L) {
+                        def.forEach {
+                            if (it.relocate()) it.renderItem()
+                        }
+                        (session.menu as? BaseMenu)?.updateTitle(session)
+                    }
                 }
-                // 渲染生成器内容
-                render()
-            }
-            // 更新
-            submit(delay = 3L) {
-                // 更新图标
-                def.forEach {
-                    if (it.relocate()) it.renderItem()
-                }
-                // 刷新标题
-                (session.menu as? BaseMenu)?.updateTitle(session)
             }
         }
 
@@ -104,13 +108,31 @@ class PanelGenerator(
         }
     }
 
-    private fun generate(session: Session): List<Object> {
+    private fun generate(session: Session): CompletableFuture<List<Object>> {
         // 将 data 属性传递到 Context 的 extVars 中，以便生成器可以访问
         val extVars = settings.data?.toMap() ?: emptyMap()
-        val created = settings.create().apply {
-            generate(Context(session.viewer, session, extVars = extVars))
+        val context = Context(session.viewer, session, extVars = extVars)
+        val created = settings.create()
+        val future = if (FoliaRuntime.isFolia && created is AsyncElementGenerator) {
+            created.generateAsync(context)
+        } else {
+            val result = CompletableFuture<List<Object>>()
+            runCatching {
+                created.generate(context)
+                created.generated ?: emptyList()
+            }.onSuccess(result::complete).onFailure(result::completeExceptionally)
+            result
+        }
+        return future.thenApply { source ->
+            finishGeneration(created, source)
+        }
+    }
+
+    private fun finishGeneration(created: ElementGenerator, source: List<Object>): List<Object> {
+        return created.apply {
+            generated = source
             if (settings.extenedObjects != null) {
-                generated = generated!! + settings.extenedObjects
+                generated = generated.orEmpty() + settings.extenedObjects
             }
             if (settings.extenedProperties != null) {
                 generated = generated?.map {
@@ -122,8 +144,7 @@ class PanelGenerator(
             if (settings.sortBy != null) {
                 sortBy { it[settings.sortBy].toString() }
             }
-        }
-        return created.generated!!
+        }.generated.orEmpty()
     }
 
 }

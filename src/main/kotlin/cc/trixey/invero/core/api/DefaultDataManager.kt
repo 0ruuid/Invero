@@ -1,6 +1,7 @@
 package cc.trixey.invero.core.api
 
 import cc.trixey.invero.common.api.InveroDataManager
+import cc.trixey.invero.ui.bukkit.util.FoliaRuntime
 import cc.trixey.invero.common.api.InveroSettings
 import cc.trixey.invero.common.util.prettyPrint
 import org.bukkit.entity.Player
@@ -12,7 +13,6 @@ import taboolib.common.platform.PlatformFactory
 import taboolib.common.platform.event.SubscribeEvent
 import taboolib.common.platform.function.console
 import taboolib.common.platform.function.getDataFolder
-import taboolib.common.platform.function.submit
 import taboolib.expansion.*
 import taboolib.module.lang.sendLang
 import java.io.File
@@ -90,7 +90,7 @@ class DefaultDataManager : InveroDataManager {
 
         @SubscribeEvent
         fun e(e: PlayerQuitEvent) {
-            submit(delay = 20L) {
+            FoliaRuntime.submitGlobal(delay = 20L) {
                 if (!e.player.isOnline) {
                     e.player.releaseDataContainer()
                 }

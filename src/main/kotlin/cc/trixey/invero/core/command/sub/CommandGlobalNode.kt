@@ -9,6 +9,8 @@ import org.bukkit.command.CommandSender
 import taboolib.common.platform.command.CommandBody
 import taboolib.common.platform.command.CommandHeader
 import cc.trixey.invero.core.command.createHelper
+import cc.trixey.invero.ui.bukkit.util.FoliaRuntime
+import cc.trixey.invero.ui.bukkit.util.runOnOwner
 import taboolib.common.platform.command.mainCommand
 import taboolib.common.platform.command.subCommand
 import taboolib.common.platform.command.suggestUncheck
@@ -62,12 +64,12 @@ object CommandGlobalNode {
                 return@execute
             }
 
-            submitAsync {
+            FoliaRuntime.runGlobal {
                 try {
                     val globalNodeManager = Invero.API.getGlobalNodeManager()
                     globalNodeManager.reloadNodes()
                 } catch (e: Exception) {
-                    sender.sendLang("global-nodes-reload-failed", e.message ?: "Unknown error")
+                    sender.runOnOwner { sender.sendLang("global-nodes-reload-failed", e.message ?: "Unknown error") }
                 }
             }
         }
@@ -153,24 +155,24 @@ object CommandGlobalNode {
                     return@execute
                 }
 
+                sender.sendLang("paste-init")
                 submitAsync {
                     val serialized = globalNodeManager.serializeNodeToJson(nodeName)
                     if (serialized == null) {
-                        sender.sendLang("global-nodes-command-test-not-found", nodeName)
+                        sender.runOnOwner { sender.sendLang("global-nodes-command-test-not-found", nodeName) }
                         return@submitAsync
                     }
 
-                    sender.sendLang("paste-init")
-
-                    paste(
+                    val result = paste(
                         "Invero Global Node Serialization",
                         "global node serialized as json",
                         48,
                         TimeUnit.HOURS,
                         createContent("$nodeName.json", serialized, "JSON"),
-                    ).apply {
-                        when (status) {
-                            cc.trixey.invero.common.util.PasteResult.Status.SUCCESS -> sender.sendLang("paste-success", anonymousLink)
+                    )
+                    sender.runOnOwner {
+                        when (result.status) {
+                            cc.trixey.invero.common.util.PasteResult.Status.SUCCESS -> sender.sendLang("paste-success", result.anonymousLink)
                             cc.trixey.invero.common.util.PasteResult.Status.ERROR -> sender.sendLang("paste-failed")
                         }
                     }

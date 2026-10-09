@@ -4,128 +4,120 @@ import cc.trixey.invero.common.Invero
 import cc.trixey.invero.common.Menu
 import cc.trixey.invero.common.MenuActivator
 import cc.trixey.invero.core.compat.DefActivator
-import cc.trixey.invero.ui.bukkit.util.synced
+import cc.trixey.invero.ui.bukkit.util.FoliaRuntime
 import kotlinx.serialization.json.*
 import org.bukkit.entity.Player
+import taboolib.common.LifeCycle
+import taboolib.common.platform.Awake
 import taboolib.common.platform.command.*
+import taboolib.common.platform.command.component.CommandBase
 import taboolib.common.platform.command.component.CommandComponent
-import taboolib.common.platform.function.unregisterCommand
 
-/**
- * Invero
- * cc.trixey.invero.core.compat.activators.ActivatorCommand
- *
- * @author Arasple
- * @since 2023/2/25 15:03
- */
 @DefActivator(["command", "commands", "cmd", "cmds"])
-class ActivatorCommand(val command: JsonElement) : MenuActivator<ActivatorCommand>() {
+class ActivatorCommand(command: JsonElement) : MenuActivator<ActivatorCommand>() {
 
     constructor() : this(JsonPrimitive(0))
 
-    private val registeredCommands = mutableSetOf<String>()
+    var command: JsonElement = command
+        private set
+    private val registrations = CommandBindings<MenuCommandRegistration>()
 
-    override fun setActivatorMenu(menu: Menu) {
-        super.setActivatorMenu(menu)
+    override fun setActivatorMenu(menu: Menu) = reload(menu, command)
 
-        synced {
-            when (command) {
-                is JsonPrimitive -> registerCommandLabel(menu, command)
-                is JsonObject -> registerCommandStructure(menu, command)
-                is JsonArray -> {
-                    if (command.firstOrNull() is JsonPrimitive) {
-                        command.forEach { registerCommandLabel(menu, it as JsonPrimitive) }
-                    } else {
-                        command.forEach { registerCommandStructure(menu, it as JsonObject) }
-                    }
+    internal fun reload(menu: Menu, value: JsonElement) {
+        val definitions = parseCommandBindings(value, Invero.API.getMenuManager().getJsonSerializer<Json>())
+        FoliaRuntime.runGlobal {
+            MenuCommandRegistration.validateOwnership(definitions, registrations.handles)
+            val permissions = definitions.associate { it.name to MenuCommandRegistration.resolvePermission(it) }
+            super.setActivatorMenu(menu)
+            var refreshNeeded = false
+            val previouslyRegistered = registrations.handles.isNotEmpty()
+            activeActivators += this
+            try {
+                registrations.reconcile(definitions,
+                    create = { definition ->
+                        refreshNeeded = true
+                        MenuCommandRegistration(definition, ::buildCommand).also { registration ->
+                            try {
+                                registration.update(definition, permissions.getValue(definition.name))
+                            } catch (failure: Throwable) {
+                                runCatching { registration.remove() }.onFailure { failure.addSuppressed(it) }
+                                throw failure
+                            }
+                        }
+                    },
+                    update = { registration, definition ->
+                        try {
+                            refreshNeeded = registration.update(
+                                definition, permissions.getValue(definition.name)
+                            ) || refreshNeeded
+                        } catch (failure: Throwable) {
+                            refreshNeeded = true
+                            throw failure
+                        }
+                    },
+                    remove = {
+                        refreshNeeded = true
+                        it.remove()
+                    })
+                command = value
+            } catch (failure: Throwable) {
+                if (!previouslyRegistered) {
+                    runCatching { registrations.clear { it.remove() } }.onFailure { failure.addSuppressed(it) }
+                    activeActivators.remove(this)
                 }
+                throw failure
+            } finally {
+                if (refreshNeeded) MenuCommandRegistration.requestRefresh()
             }
         }
     }
 
     override fun unregister() {
-        synced {
-            registeredCommands.forEach { unregisterCommand(it) }
-            registeredCommands.clear()
-        }
+        if (!MenuCommandRegistration.isEnabled) return
+        FoliaRuntime.runGlobal { releaseCommands() }
         super.unregister()
     }
 
-    private fun registerCommandStructure(menu: Menu, jsonObject: JsonObject) {
-        Invero
-            .API
-            .getMenuManager()
-            .getJsonSerializer<Json>()
-            .decodeFromJsonElement<CommandStructure>(jsonObject)
-            .apply {
-                val perm = permission ?: ""
-                command(
-                    name,
-                    aliases ?: emptyList(),
-                    description ?: "",
-                    usage ?: "",
-                    perm,
-                    permissionMessage ?: "",
-                    permissionDefault = if (perm.isEmpty()) PermissionDefault.TRUE else PermissionDefault.OP
-                ) {
-                    // 无参数或没有必选参数，则添加默认执行为打开菜单
-                    if (arguments.isNullOrEmpty() || arguments.all { it.optional }) {
-                        execute<Player> { sender, _, _ -> menu.open(sender) }
-                    }
-                    // 标记当前层
-                    var layer: CommandComponent = this
-                    // 记录截至目前每层的参数
-                    val impl = mutableSetOf<String>()
-                    // 遍历参数实现
-                    arguments?.forEach { argument ->
-                        val id = argument.id.also { impl += it }
-                        val type = argument.type ?: CommandArgument.Type.ANY
-                        val default = argument.default
-                        val restrict = argument.restrict
-                        val suggest = argument.suggest ?: emptyList()
-
-                        layer.dynamic(id, optional) {
-                            execute<Player> { sender, ctx, _ ->
-                                val variables = buildMap {
-                                    impl.forEach { key ->
-                                        val value = ctx.getOrNull(key) ?: default ?: error("No valid value")
-                                        put(key, value)
-                                    }
-                                }
-                                menu.open(sender, variables)
-                            }
-                            when (type) {
-                                CommandArgument.Type.ANY -> suggestion<Player>(!restrict) { _, _ -> suggest }
-                                CommandArgument.Type.DECIMAL -> restrictDouble()
-                                CommandArgument.Type.INTEGER -> restrictInt()
-                                CommandArgument.Type.BOOLEAN -> restrictBoolean()
-                                CommandArgument.Type.PLAYER -> suggestPlayers(suggest)
-                                CommandArgument.Type.WORLD -> suggestWorlds(suggest)
-                            }
-                        }.also { layer = it }
-                    }
-                }
-                registeredCommands += name
-                aliases?.map { it.lowercase() }?.let { registeredCommands += it }
-            }
+    private fun releaseCommands() {
+        if (registrations.clear { it.remove() }) MenuCommandRegistration.requestRefresh()
+        activeActivators.remove(this)
     }
 
-    private fun registerCommandLabel(menu: Menu, jsonPrimitive: JsonPrimitive) {
-        val id = menu.id ?: return
-        val content = jsonPrimitive.contentOrNull?.lowercase() ?: return
-
-        command(content, permissionDefault = PermissionDefault.TRUE) {
-            execute<Player> { sender, _, _ ->
-                Invero.API.getMenuManager().getMenu(id)?.open(sender)
+    private fun buildCommand(definition: CommandStructure): CommandBase = CommandBase().apply {
+        val arguments = definition.arguments.orEmpty()
+        if (arguments.all { it.optional }) {
+            execute<Player> { sender, context, _ ->
+                activate(sender, commandVariables(arguments, context::getOrNull))
             }
         }
-        registeredCommands += content
+        var layer: CommandComponent = this
+        arguments.forEach { argument ->
+            layer = layer.dynamic(argument.id, argument.optional) {
+                execute<Player> { sender, context, _ ->
+                    activate(sender, commandVariables(arguments, context::getOrNull))
+                }
+                when (argument.type ?: CommandArgument.Type.ANY) {
+                    CommandArgument.Type.ANY -> suggestion<Player>(!argument.restrict) { _, _ -> argument.suggest.orEmpty() }
+                    CommandArgument.Type.DECIMAL -> restrictDouble()
+                    CommandArgument.Type.INTEGER -> restrictInt()
+                    CommandArgument.Type.BOOLEAN -> restrictBoolean()
+                    CommandArgument.Type.PLAYER -> suggestPlayers(argument.suggest.orEmpty())
+                    CommandArgument.Type.WORLD -> suggestWorlds(argument.suggest.orEmpty())
+                }
+            }
+        }
     }
 
-    override fun deserialize(element: JsonElement): ActivatorCommand {
-        return ActivatorCommand(element)
-    }
-
+    override fun deserialize(element: JsonElement) = ActivatorCommand(element)
     override fun serialize(activator: ActivatorCommand) = activator.command
 
+    companion object {
+        private val activeActivators = mutableSetOf<ActivatorCommand>()
+
+        @Awake(LifeCycle.DISABLE)
+        fun disable() {
+            activeActivators.toList().forEach { it.releaseCommands() }
+        }
+    }
 }

@@ -8,6 +8,9 @@ import cc.trixey.invero.common.MenuActivator
 import cc.trixey.invero.common.events.MenuCloseEvent
 import cc.trixey.invero.common.events.MenuOpenEvent
 import cc.trixey.invero.common.util.prettyPrint
+import cc.trixey.invero.core.compat.activators.ActivatorCommand
+import cc.trixey.invero.core.compat.activators.commandBindingNames
+import cc.trixey.invero.core.compat.activators.commandBindingValue
 import cc.trixey.invero.core.menu.MenuEvents
 import cc.trixey.invero.core.menu.MenuSettings
 import cc.trixey.invero.core.menu.MenuTask
@@ -188,20 +191,31 @@ class BaseMenu(
     /**
      * 注册此菜单附带产物
      */
-    override fun register() {
-        bindings?.forEach { key, value ->
-            Invero.API
-                .getRegistry()
-                .createActivator(this, key, value)
+    override fun register() = register(null)
+
+    internal fun register(previous: BaseMenu?) {
+        bindings?.filterKeys { it.lowercase() !in commandBindingNames }?.forEach { (key, value) ->
+            Invero.API.getRegistry().createActivator(this, key, value)
                 ?.let { activators[key.lowercase()] = it }
         }
+        val value = commandBindingValue(bindings) ?: return
+        val oldActivators = previous?.activators ?: activators
+        val reusable = oldActivators.values.filterIsInstance<ActivatorCommand>().firstOrNull()
+        val commandKeys = bindings!!.keys.filter { it.lowercase() in commandBindingNames }
+        val registered = if (reusable != null) {
+            reusable.reload(this, value)
+            oldActivators.entries.removeIf { it.value === reusable }
+            reusable
+        } else {
+            Invero.API.getRegistry().createActivator(this, commandKeys.first(), value) ?: return
+        }
+        commandKeys.forEach { activators[it.lowercase()] = registered }
     }
 
-    /**
-     * 注销此菜单附带产物
-     */
+    /** 注销旧绑定前，保留的命令激活器已经转移到新菜单。 */
     override fun unregister() {
-        activators.forEach { (_, value) -> value.unregister() }
+        activators.values.toSet().forEach { it.unregister() }
+        activators.clear()
     }
 
     /**

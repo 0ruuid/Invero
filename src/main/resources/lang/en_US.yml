@@ -16,6 +16,7 @@ menu-loader-menu-duplicate: '&8[&fInvero&8] &cMenu &7{0} &calready exists as ano
 menu-loader-menu-finished: '&8[&fInvero&8] &7Successfully loaded &a{0} &7valid menus... &8({1} secs)'
 menu-loader-auto-reload-errored: '&8[&fInvero&8] &cAutomatic reloading of menu &7{0} &cfailed.'
 menu-loader-auto-reload-successed: '&8[&fInvero&8] &7Auto-reloaded changes for menu {0}.'
+menu-command-label-conflict: '&8[&fInvero&8] &eCommand &f/{0} &eis already registered. Use &f/{1}&e, or choose a different menu command name.'
 
 menu-list-empty: '&8[&fInvero&8] &7No menu found &8(filter = {0}).'
 menu-list-header: [

@@ -64,7 +64,7 @@ icons:
         catch: filter
         signIndex: -1
         cancel: [ 'exit', 'cancel' ]
-      right: context del filter regenerate icons refresh menu title update
+      right: context del filter regenerate icons update menu title update
 
   '>':
     material: black stained glass pane
@@ -76,7 +76,8 @@ icons:
         name: '<green>Next page →'
         action: |-
           page next
-          icons refresh
+          icons relocate
+          icons update
           menu title update
   '<':
     material: black stained glass pane
@@ -88,5 +89,6 @@ icons:
         name: '<aqua>← Previous page'
         action: |-
           page previous
-          icons refresh
+          icons relocate
+          icons update
           menu title update

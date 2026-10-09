@@ -6,11 +6,12 @@ import cc.trixey.invero.common.api.InveroMenuManager
 import cc.trixey.invero.common.api.InveroSettings
 import cc.trixey.invero.common.api.SerializeResult
 import cc.trixey.invero.common.api.SerializeResult.State.*
-import cc.trixey.invero.common.util.alert
 import cc.trixey.invero.common.util.findInJar
 import cc.trixey.invero.common.util.prettyPrint
 import cc.trixey.invero.core.AgentPanel
 import cc.trixey.invero.core.BaseMenu
+import cc.trixey.invero.core.compat.activators.commandBindingValue
+import cc.trixey.invero.core.compat.activators.parseCommandBindings
 import cc.trixey.invero.core.action.*
 import cc.trixey.invero.core.panel.PanelGenerator
 import cc.trixey.invero.core.panel.PanelPaged
@@ -20,6 +21,8 @@ import cc.trixey.invero.core.serialize.BaseMenuSerializer
 import cc.trixey.invero.core.serialize.hocon.PatchedLoader
 import cc.trixey.invero.core.util.session
 import cc.trixey.invero.ui.bukkit.util.FoliaRuntime
+import cc.trixey.invero.ui.bukkit.util.runOnEntity
+import cc.trixey.invero.ui.bukkit.util.runOnOwner
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.modules.SerializersModule
@@ -90,6 +93,12 @@ class DefaultMenuManager : InveroMenuManager {
     }
 
     private val menus = ConcurrentHashMap<String, BaseMenu>()
+    private val menuFiles = linkedMapOf<String, File>()
+    private val watchedFiles = linkedSetOf<File>()
+    private val versions = ReloadVersions()
+
+    @Volatile
+    private var closed = false
 
     override fun getMenu(id: String, ignoreCase: Boolean): BaseMenu? {
         return menus.entries.find { it.key.equals(id, ignoreCase) }?.value
@@ -99,131 +108,199 @@ class DefaultMenuManager : InveroMenuManager {
         return menus.values.toList()
     }
 
-    override fun deserialize(workspace: File): List<SerializeResult> {
+    override fun deserialize(workspace: File): List<SerializeResult> = deserialize(workspace, menus)
+
+    private fun deserialize(
+        workspace: File,
+        destination: MutableMap<String, BaseMenu>,
+        expectedFiles: Set<File> = emptySet()
+    ): List<SerializeResult> {
         val matcher = InveroSettings.fileFilter.toRegex()
         val results = mutableListOf<SerializeResult>()
-        val configurations = workspace
-            .walk()
-            .filter { it.name.matches(matcher) }
-            .mapNotNull {
-                runCatching {
-                    val conf = PatchedLoader.loadFromFile(it)
-                    val keys = conf.getKeys(false)
-                    if (menuDeclarations.any { it in keys }) conf else null
-                }.onFailure { failure ->
-                    results += SerializeResult(
-                        file = it,
-                        state = FAILURE_FILE,
-                        throwable = failure
-                    )
-                }.getOrNull()
+        workspace.walk().filter { it.isFile && it.name.matches(matcher) }.forEach { file ->
+            val configuration = runCatching { PatchedLoader.loadFromFile(file) }.onFailure {
+                results += SerializeResult(file = file, state = FAILURE_FILE, throwable = it)
+            }.getOrNull() ?: return@forEach
+            if (menuDeclarations.none { it in configuration.getKeys(false) }) {
+                if (file.normalized() in expectedFiles) results += SerializeResult(file = file, state = FAILURE_MENU,
+                    throwable = IllegalArgumentException("Menu configuration has no menu/title section: $file"))
+                return@forEach
             }
-
-        configurations.forEach { conf ->
-            val file = conf.file ?: error("No valid file of configuration")
-            val menu = runCatching { deserializeToMenu(conf, conf.name) }.onFailure {
-                results += SerializeResult(
-                    file = file,
-                    state = FAILURE_MENU,
-                    throwable = it
-                )
-            }.getOrNull()
-
-            if (menu != null) {
-                if (getMenu(conf.name, true) != null) {
-                    results += SerializeResult(
-                        file = file,
-                        state = FAILURE_DUPLICATED
-                    )
-                } else {
-                    menus[conf.name] = menu
-
-                    results += SerializeResult(
-                        menu,
-                        file,
-                        SUCCESS
-                    )
-                }
+            val menu = runCatching { deserializeToMenu(configuration, configuration.name) }.onFailure {
+                results += SerializeResult(file = file, state = FAILURE_MENU, throwable = it)
+            }.getOrNull() ?: return@forEach
+            val id = menu.id!!
+            if (destination.keys.any { it.equals(id, ignoreCase = true) }) {
+                results += SerializeResult(file = file, state = FAILURE_DUPLICATED)
+            } else {
+                destination[id] = menu
+                results += SerializeResult(menu, file, SUCCESS)
             }
         }
-
         return results
     }
 
     override fun reload(receiver: CommandSender) {
-        // mark time start
+        if (closed) return
         val start = System.currentTimeMillis()
-        // unregister all menus
-        if (menus.isNotEmpty()) {
-            onlinePlayers.forEach { player -> player.session?.menu?.close(player) }
-            menus.clear()
-            menus.values.forEach { it.unregister() }
-        }
-        // init workspaces
-        val workspaces = initWorkspaces()
-
-        if (workspaces.isEmpty()) {
-            receiver.sendLang("menu-loader-workspace-empty")
-        } else {
-            receiver.sendLang("menu-loader-workspace-inited", workspaces.size)
-            workspaces
-                .flatMap { deserialize(it) }
-                .forEach {
-                    val file = it.file
-                    when (it.state) {
-                        FAILURE_FILE -> receiver.sendLang("menu-loader-file-errored", file.name)
-                        FAILURE_MENU -> receiver.sendLang("menu-loader-menu-errored", file.name)
-                        FAILURE_DUPLICATED -> receiver.sendLang("menu-loader-menu-duplicate", file.name)
-                        SUCCESS -> if (InveroSettings.fileListener) registerListener(file, it.menu as BaseMenu)
-                    }
-                    it.print()
-                }
-            if (menus.isNotEmpty()) {
-                val took = (System.currentTimeMillis() - start).div(1000.0)
-                receiver.sendLang("menu-loader-menu-finished", menus.size, took)
-            }
-
-            menus.values.forEach { it.register() }
-        }
-    }
-
-    private fun registerListener(file: File, menu: BaseMenu) {
-        val menuId = menu.id!!
-
-        FileWatcher.INSTANCE.addSimpleListener(file) {
+        val ticket = versions.beginReload()
+        FoliaRuntime.runGlobal {
+            val expectedFiles = menuFiles.values.toSet()
             submitAsync {
-                if (!file.exists() || !menus.containsKey(menuId)) {
-                    FileWatcher.INSTANCE.removeListener(file)
-                } else runCatching {
-                    deserializeToMenu(PatchedLoader.loadFromFile(file), menuId)
-                }.onFailure {
-                    it.prettyPrint()
-                    console().sendLang("menu-loader-auto-reload-errored", menuId)
-                }.getOrNull()?.let { loaded ->
-                    FoliaRuntime.runGlobal {
-                        val viewers = onlinePlayers.filter { it.session?.menu?.id == menuId }
-                        // replace in memory
-                        menus[menuId]?.apply {
-                            viewers.forEach { close(it, false, closeInventory = false) }
-                            unregister()
+                val staged = linkedMapOf<String, BaseMenu>()
+                val workspaces = runCatching { initWorkspaces() }.onFailure { it.prettyPrint() }
+                    .getOrNull() ?: return@submitAsync
+                val results = runCatching { workspaces.flatMap { deserialize(it, staged, expectedFiles) } }
+                    .onFailure { it.prettyPrint() }.getOrNull() ?: return@submitAsync
+                if (closed) return@submitAsync
+                FoliaRuntime.runGlobal apply@{
+                    if (closed || !versions.isCurrent(ticket)) return@apply
+                    if (workspaces.isEmpty()) notify(receiver, "menu-loader-workspace-empty")
+                    else notify(receiver, "menu-loader-workspace-inited", workspaces.size)
+                    val failed = results.filter { it.state != SUCCESS }.mapTo(hashSetOf()) { it.file.normalized() }
+                    val previousFiles = menuFiles.toMap()
+                    results.forEach { result ->
+                        val file = result.file.normalized()
+                        when (result.state) {
+                            FAILURE_FILE -> notify(receiver, "menu-loader-file-errored", file.name)
+                            FAILURE_MENU -> notify(receiver, "menu-loader-menu-errored", file.name)
+                            FAILURE_DUPLICATED -> notify(receiver, "menu-loader-menu-duplicate", file.name)
+                            SUCCESS -> if (file.exists() && versions.isCurrent(ticket, file.path)) {
+                                if (!replaceMenu(result.menu as BaseMenu, file)) {
+                                    failed += file
+                                    notify(receiver, "menu-loader-menu-errored", file.name)
+                                }
+                            }
                         }
-                        menus[menuId] = loaded
-                        alert { loaded.register() }
-                        console().sendLang("menu-loader-auto-reload-successed", menuId)
-                        viewers.forEach {
-                            loaded.open(player = it, vars = it.session?.getVariables() ?: emptyMap())
-                        }
+                        result.print()
                     }
+                    if (workspaces.isNotEmpty()) previousFiles.forEach { (id, file) ->
+                        if (id !in staged && file !in failed && versions.isCurrent(ticket, file.path)) removeMenu(id)
+                    }
+                    notify(receiver, "menu-loader-menu-finished", menus.size,
+                        (System.currentTimeMillis() - start) / 1000.0)
                 }
             }
         }
     }
+
+    private fun replaceMenu(loaded: BaseMenu, file: File): Boolean {
+        val id = loaded.id!!
+        val previousId = if (menus.containsKey(id)) id else menuFiles.entries.find { it.value == file }?.key
+        val previous = previousId?.let { menus[it] }
+        val previousFile = previousId?.let { menuFiles[it] }
+        if (previousFile != null && previousFile != file && previousFile.exists() && included(previousFile)) {
+            console().sendLang("menu-loader-menu-duplicate", id)
+            return false
+        }
+        if (runCatching { loaded.register(previous) }.onFailure {
+            loaded.unregister()
+            it.prettyPrint()
+        }.isFailure) return false
+        menus[id] = loaded
+        previous?.unregister()
+        if (previousId != null && previousId != id) {
+            menus.remove(previousId)
+            menuFiles.remove(previousId)
+        }
+        menuFiles[id] = file
+        if (InveroSettings.fileListener) registerListener(file)
+        refreshViewers(previousId ?: id, loaded)
+        return true
+    }
+
+    private fun removeMenu(id: String) {
+        menus[id]?.unregister()
+        menus.remove(id)
+        menuFiles.remove(id)
+        refreshViewers(id, null)
+    }
+
+    private fun refreshViewers(id: String, loaded: BaseMenu?) {
+        onlinePlayers.forEach { player ->
+            player.runOnEntity {
+                val current = if (loaded == null) !menus.containsKey(id) else menus[loaded.id] === loaded
+                if (closed || !current) return@runOnEntity
+                val session = player.session ?: return@runOnEntity
+                if (session.menu.id != id) return@runOnEntity
+                val variables = session.getVariables()
+                session.menu.close(player, closeWindow = loaded == null, closeInventory = loaded == null)
+                loaded?.open(player, variables)
+            }
+        }
+    }
+
+    private fun notify(receiver: CommandSender, key: String, vararg args: Any) {
+        receiver.runOnOwner { receiver.sendLang(key, *args) }
+    }
+
+    private fun registerListener(file: File) {
+        if (!watchedFiles.add(file)) return
+        runCatching { FileWatcher.INSTANCE.addSimpleListener(file) { reloadFile(file) } }.onFailure {
+            watchedFiles.remove(file)
+            it.prettyPrint()
+        }
+    }
+
+    private fun reloadFile(file: File) {
+        if (closed || !InveroSettings.fileListener) return
+        val ticket = versions.beginChange(file.path)
+        submitAsync(delay = 2L) {
+            if (closed || !versions.isCurrent(ticket, file.path)) return@submitAsync
+            val loaded = runCatching {
+                if (!file.exists() || !included(file)) null else {
+                    val configuration = PatchedLoader.loadFromFile(file)
+                    require(menuDeclarations.any { it in configuration.getKeys(false) }) {
+                        "Menu configuration has no menu/title section: $file"
+                    }
+                    deserializeToMenu(configuration, file.nameWithoutExtension)
+                }
+            }.onFailure {
+                it.prettyPrint()
+                console().sendLang("menu-loader-auto-reload-errored", file.nameWithoutExtension)
+            }.getOrElse { return@submitAsync }
+            if (closed) return@submitAsync
+            FoliaRuntime.runGlobal apply@{
+                if (closed || !versions.isCurrent(ticket, file.path)) return@apply
+                val previousId = menuFiles.entries.find { it.value == file }?.key
+                if (loaded == null) previousId?.let { removeMenu(it) } else {
+                    if (menus.containsKey(loaded.id!!) && menuFiles[loaded.id] != file) {
+                        console().sendLang("menu-loader-menu-duplicate", loaded.id!!)
+                        return@apply
+                    }
+                    if (!replaceMenu(loaded, file)) {
+                        console().sendLang("menu-loader-auto-reload-errored", loaded.id!!)
+                        return@apply
+                    }
+                    console().sendLang("menu-loader-auto-reload-successed", loaded.id!!)
+                }
+            }
+        }
+    }
+
+    private fun dispose() {
+        closed = true
+        versions.invalidate()
+        watchedFiles.forEach { FileWatcher.INSTANCE.removeListener(it) }
+        watchedFiles.clear()
+        menus.values.forEach { it.unregister() }
+        menus.clear()
+        menuFiles.clear()
+    }
+
+    private fun included(file: File): Boolean = file.name.matches(InveroSettings.fileFilter.toRegex()) &&
+        InveroSettings.workspaces.any { file.toPath().startsWith(File(it).normalized().toPath()) }
+
+    private fun File.normalized(): File = absoluteFile.normalize()
 
     override fun deserializeToMenu(configuration: Configuration, name: String?): BaseMenu {
         configuration.changeType(Type.JSON)
         return json
             .decodeFromString(BaseMenuSerializer, configuration.saveToString())
-            .also { if (name != null && it.id == null) it.id = name }
+            .also {
+                if (name != null && it.id == null) it.id = name
+                commandBindingValue(it.bindings)?.let { value -> parseCommandBindings(value, json) }
+            }
     }
 
     override fun serializeToJson(menu: Menu): String {
@@ -248,12 +325,16 @@ class DefaultMenuManager : InveroMenuManager {
             }
         }
 
+        @Awake(LifeCycle.DISABLE)
+        fun disable() {
+            (Invero.API.getMenuManager() as? DefaultMenuManager)?.dispose()
+        }
+
         fun initWorkspaces(): List<File> {
             val list = ArrayList<File>()
 
             for (path in InveroSettings.workspaces) {
                 val file = File(path)
-                // release defaults if not exist
                 if (!file.exists()) { 
                     releaseWorkspace(file)
                 }

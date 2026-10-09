@@ -144,7 +144,7 @@ private fun ItemStack.generateProperties(
         // [属性] 附魔
         frameBy { enchantments }?.forEach { (enchantment, level) ->
             val enchant = XEnchantment.of(enchantment).getOrNull()?.get()
-            if (enchant != null) this.enchants[enchant] = level
+            if (enchant != null) this.addEnchant(enchant, level, true)
         }
     }.also { itemStack ->
         // [属性] NBT

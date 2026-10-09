@@ -11,6 +11,7 @@ menu-loader-menu-duplicate: '&8[&fInvero&8] &c菜單 &7{0} &c存在另外一個�
 menu-loader-menu-finished: '&8[&fInvero&8] &7已成功載入了 &f{0} &7個有效菜單... &8({1} secs)'
 menu-loader-auto-reload-errored: '&8[&fInvero&8] &c自動重載 &7{0} &c菜單失敗'
 menu-loader-auto-reload-successed: '&8[&fInvero&8] &7自動載入了菜單 &f{0} &7的更改.'
+menu-command-label-conflict: '&8[&fInvero&8] &e命令 &f/{0} &e已被佔用，請使用 &f/{1}&e，或修改菜單命令名稱。'
 
 menu-list-empty: '&8[&fInvero&8] &7沒有找到任何菜單 &8(過濾器 = {0}).'
 menu-list-header: [

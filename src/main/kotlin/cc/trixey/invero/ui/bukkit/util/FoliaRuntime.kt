@@ -13,14 +13,13 @@ import taboolib.platform.util.runTask
 import taboolib.platform.util.submit as submitAtOwner
 import java.util.concurrent.CompletableFuture
 
-/**
- * Routes Bukkit work to the scheduler that owns the affected resource.
- */
+/** Paper/Folia 调度门面。 */
 object FoliaRuntime {
 
     val isFolia: Boolean
         get() = Folia.isFolia
 
+    /** 在玩家所属线程执行任务。 */
     fun runPlayer(player: Player, action: () -> Unit) {
         if (isFolia && !isOwnedByCurrentRegion(player)) {
             player.runTask(Runnable(action))
@@ -31,6 +30,7 @@ object FoliaRuntime {
         }
     }
 
+    /** 将任务提交到玩家所属线程。 */
     fun schedulePlayer(player: Player, action: () -> Unit) {
         if (isFolia) {
             player.runTask(Runnable(action))
@@ -39,6 +39,7 @@ object FoliaRuntime {
         }
     }
 
+    /** 提交玩家任务，延迟和周期单位为 tick。 */
     fun submitPlayer(
         player: Player,
         delay: Long = 0,
@@ -52,14 +53,36 @@ object FoliaRuntime {
         }
     }
 
+    private val inGlobalAction = ThreadLocal.withInitial { false }
+
+    /** 在全局线程执行任务。 */
     fun runGlobal(action: () -> Unit) {
-        if (isFolia || !isPrimaryThread) {
-            submit { action() }
-        } else {
+        if (isGlobalOwner()) {
             action()
+        } else {
+            submit { runGlobalAction(action) }
         }
     }
 
+    private fun isGlobalOwner(): Boolean {
+        if (!isFolia) return isPrimaryThread
+        if (inGlobalAction.get()) return true
+
+        return runCatching {
+            Bukkit::class.java.invokeMethod<Boolean>("isGlobalTickThread", isStatic = true, remap = false)
+        }.getOrNull() == true
+    }
+
+    private fun runGlobalAction(action: () -> Unit) {
+        inGlobalAction.set(true)
+        try {
+            action()
+        } finally {
+            inGlobalAction.remove()
+        }
+    }
+
+    /** 提交全局任务，延迟和周期单位为 tick。 */
     fun submitGlobal(
         delay: Long = 0,
         period: Long = 0,

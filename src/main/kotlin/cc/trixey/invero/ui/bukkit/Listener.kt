@@ -152,12 +152,14 @@ object Listener {
             }
 
             "PacketPlayInWindowClick", "ServerboundContainerClickPacket" -> {
-                val inventory = viewer.viewingWindow()?.inventory ?: return
+                val window = viewer.viewingWindow()?: return
 
-                if (inventory is InventoryVanilla) {
-                    player.scheduleOnEntity {
-                        player.sendCancelCoursor()
-                        (viewer.viewingWindow()?.inventory as? InventoryVanilla)?.updatePlayerInventory()
+                if (window.inventory is InventoryVanilla) {
+                    if (!window.anyIOPanel) {
+                        player.scheduleOnEntity {
+                            player.sendCancelCoursor()
+                            (viewer.viewingWindow()?.inventory as? InventoryVanilla)?.updatePlayerInventory()
+                        }
                     }
                     return
                 }

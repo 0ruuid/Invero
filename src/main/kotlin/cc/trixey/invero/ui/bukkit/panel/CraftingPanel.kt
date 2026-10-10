@@ -4,7 +4,7 @@ import cc.trixey.invero.ui.bukkit.PanelContainer
 import cc.trixey.invero.ui.bukkit.ProxyBukkitInventory
 import cc.trixey.invero.ui.bukkit.util.clickType
 import cc.trixey.invero.ui.bukkit.util.reachedMaxStackSize
-import cc.trixey.invero.ui.bukkit.util.runOnEntity
+import cc.trixey.invero.ui.bukkit.util.submitOnEntity
 import cc.trixey.invero.ui.common.Pos
 import cc.trixey.invero.ui.common.Scale
 import cc.trixey.invero.ui.common.event.ClickType
@@ -71,12 +71,7 @@ class CraftingPanel(
             // cancel event & run callbacks
             e.isCancelled = false
             // update storage
-            window.viewer.get<org.bukkit.entity.Player>()?.runOnEntity {
-                (freeSlots + storage.keys).distinct().forEach {
-                    inventory[locatingAbsoluteSlot(it)].storeAt(it)
-                }
-            }
-            runCallback()
+            scheduleStorageRefresh()
             return true
         }
         return false
@@ -94,12 +89,7 @@ class CraftingPanel(
 
         // 事件结束后统一回读 GUI 槽位，确保存储与界面一致
         // 支持拖入与取出
-        window.viewer.get<org.bukkit.entity.Player>()?.runOnEntity {
-            (freeSlots + storage.keys).distinct().forEach {
-                inventory[locatingAbsoluteSlot(it)].storeAt(it)
-            }
-            runCallback()
-        }
+        scheduleStorageRefresh()
         return true
     }
 
@@ -112,10 +102,7 @@ class CraftingPanel(
 
         e.isCancelled = false
 
-        window.viewer.get<org.bukkit.entity.Player>()?.runOnEntity {
-            inventory[locatingAbsoluteSlot(pos)].storeAt(slot)
-            runCallback()
-        }
+        scheduleStorageRefresh()
         return true
     }
 
@@ -192,5 +179,12 @@ class CraftingPanel(
     private fun storeDel(slot: Int) {
         storage.remove(slot)
     }
-
+    private fun scheduleStorageRefresh() {
+        window.viewer.get<org.bukkit.entity.Player>()?.submitOnEntity(delay = 1L) {
+            (freeSlots + storage.keys).distinct().forEach {
+                inventory[locatingAbsoluteSlot(it)].storeAt(it)
+            }
+            runCallback()
+        }
+    }
 }

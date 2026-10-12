@@ -4,7 +4,8 @@ import cc.trixey.invero.ui.bukkit.PanelContainer
 import cc.trixey.invero.ui.bukkit.ProxyBukkitInventory
 import cc.trixey.invero.ui.bukkit.util.clickType
 import cc.trixey.invero.ui.bukkit.util.reachedMaxStackSize
-import cc.trixey.invero.ui.bukkit.util.runOnEntity
+import cc.trixey.invero.core.util.session
+import cc.trixey.invero.ui.bukkit.PlayerViewer
 import cc.trixey.invero.ui.common.Pos
 import cc.trixey.invero.ui.common.Scale
 import cc.trixey.invero.ui.common.event.ClickType
@@ -60,6 +61,8 @@ class CraftingPanel(
      * 相对槽位应属于 freeSlots
      */
     val storage = ConcurrentHashMap<Int, ItemStack>()
+    /** 是否已有排队的槽位回读（同一 tick 内多次交互只调度一次） */
+    private var storageRefreshPending = false
 
     /**
      * 点击交互事件处理
@@ -71,12 +74,7 @@ class CraftingPanel(
             // cancel event & run callbacks
             e.isCancelled = false
             // update storage
-            window.viewer.get<org.bukkit.entity.Player>()?.runOnEntity {
-                (freeSlots + storage.keys).distinct().forEach {
-                    inventory[locatingAbsoluteSlot(it)].storeAt(it)
-                }
-            }
-            runCallback()
+            scheduleStorageRefresh()
             return true
         }
         return false
@@ -94,12 +92,7 @@ class CraftingPanel(
 
         // 事件结束后统一回读 GUI 槽位，确保存储与界面一致
         // 支持拖入与取出
-        window.viewer.get<org.bukkit.entity.Player>()?.runOnEntity {
-            (freeSlots + storage.keys).distinct().forEach {
-                inventory[locatingAbsoluteSlot(it)].storeAt(it)
-            }
-            runCallback()
-        }
+        scheduleStorageRefresh()
         return true
     }
 
@@ -109,13 +102,8 @@ class CraftingPanel(
     override fun handleItemsMove(pos: Pos, e: InventoryClickEvent): Boolean {
         val slot = pos.slot
         if (slot !in freeSlots) return handleClick(pos, e.clickType, e)
-
         e.isCancelled = false
-
-        window.viewer.get<org.bukkit.entity.Player>()?.runOnEntity {
-            inventory[locatingAbsoluteSlot(pos)].storeAt(slot)
-            runCallback()
-        }
+        scheduleStorageRefresh()
         return true
     }
 
@@ -179,6 +167,14 @@ class CraftingPanel(
             .forEach { inventory[locatingAbsoluteSlot(it)] = null }
     }
 
+    /**
+     * 关闭返还：回读最新槽位数据（不触发回调）并取出全部存储物品。
+     */
+    fun drainStorage(): List<ItemStack> {
+        syncStorage()
+        return freeSlots.mapNotNull { storage[it] }
+    }
+
     /*
     PRIVATE FUNCTIONS
      */
@@ -193,4 +189,26 @@ class CraftingPanel(
         storage.remove(slot)
     }
 
+    /** 把交互槽位的当前物品回读到 storage（Set 相加本身去重，无需 distinct） */
+    private fun syncStorage() {
+        (freeSlots + storage.keys).forEach { slot ->
+            val item = inventory[locatingAbsoluteSlot(slot)]
+            if (item == null || item.isAir) storage.remove(slot) else storage[slot] = item
+        }
+    }
+
+    private fun scheduleStorageRefresh() {
+        if (storageRefreshPending) return
+        val viewer = window.viewer as? PlayerViewer ?: return
+        val session = viewer.session ?: return
+        storageRefreshPending = true
+        // 挂到会话任务组：关闭/切换菜单时会话注销自动取消
+        session.taskGroup.launch(delay = 1L) {
+            storageRefreshPending = false
+            // 会话已注销或切换：丢弃本次回读
+            if (viewer.session !== session) return@launch
+            syncStorage()
+            runCallback()
+        }
+    }
 }

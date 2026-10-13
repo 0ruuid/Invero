@@ -168,7 +168,9 @@ private fun List<String>.loreColored(enhancedProcess: Boolean?): List<String> {
 
     return buildList {
         while (iterator.hasNext()) {
-            val line = iterator.next()
+            val line = iterator.next().let {
+                if (enhancedProcess == true) it.replace("\\n", "\n") else it
+            }
             // 处理换行符，支持 YAML |- 多行字符串格式
             if (line.contains('\n')) {
                 this += line.split("\n").map { it.prefixColored }

@@ -113,9 +113,9 @@ class BaseMenu(
             overridePlayerInventory = settings.overridePlayerInventory,
             title = settings.title.default.translateFormattedMessage(player, vars, skipComp = true)
         ).onClose {
-            // restore collection
+            // 关闭前回读最新槽位数据并返还物品
             it.panels.filterIsInstance<CraftingPanel>().forEach { panel ->
-                player.giveItem(panel.freeSlots.mapNotNull { slot -> panel.storage[slot] })
+                player.giveItem(panel.drainStorage())
             }
             // close callback (internal)
             close(viewer, closeWindow = false, closeInventory = false)

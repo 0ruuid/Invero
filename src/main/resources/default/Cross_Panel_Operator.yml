@@ -6,7 +6,7 @@ title: 'cross-panel-operator usage'
 rows: 5
 
 events:
-  post_open: |-
+  pre_open: |-
     context set dynamicAmount to 1
 
 panels:

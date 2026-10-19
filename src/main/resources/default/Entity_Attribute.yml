@@ -38,4 +38,4 @@ items:
       &6Click to kill this pig
     # 点击杀之（1.19.3）
     action: |-
-      command "minecraft:kill @e[type=minecraft:{{&activator_entity_type[lowercase]}},distance=..5]"
+      command "minecraft:kill @e\[type=minecraft:{{&activator_entity_type[lowercase]}},distance=..5\]"

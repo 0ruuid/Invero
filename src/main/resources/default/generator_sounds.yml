@@ -65,8 +65,8 @@ generator:
       number_key_8: 'context set pitch to 8'
       number_key_9: 'context set pitch to 9'
       middle: |-
-        msg "<dark_gray>..."
-        msg "<bold><gold>[Pitch: <yellow>{{&pitch}}<gold>] <u><green><click:suggest_command:'sound {{&element_name}} by 1 {{&pitch}}'><hover:show_text:'<green>Click to copy'>{{&element_name}}</hover></click>"
+        tell color "&{dark_gray}..."
+        fmsg "&6&l\[Pitch: &e&l{{&pitch}}&6&l\] [{{&element_name}}](b;u;c=green;suggest=sound {{&element_name}} by 1 {{&pitch}};hover=&aClick to copy)"
       def: |-
         sound &element_name by 1 &pitch
         context set last_previewed to &element_name
@@ -103,7 +103,7 @@ icons:
       number_key_9: context set filter to ui
       number_key: |-
         if regenerate then {
-          icons refresh
+          icons update
           sound BLOCK_NOTE_BLOCK_PLING-1-2
           menu title update
         }
@@ -111,7 +111,7 @@ icons:
         catch: filter
         signIndex: -1
         cancel: [ 'exit', 'cancel' ]
-      right: context del filter regenerate icons refresh menu title update
+      right: context del filter regenerate icons update menu title update
   '#':
     material: black stained glass pane
     name: '<dark_gray>...'
@@ -129,7 +129,8 @@ icons:
         name: '<green>Next page →'
         action: |-
           page next
-          icons refresh
+          icons relocate
+          icons update
           menu title update
   '<':
     material: black stained glass pane
@@ -141,5 +142,6 @@ icons:
         name: '<aqua>← Previous page'
         action: |-
           page previous
-          icons refresh
+          icons relocate
+          icons update
           menu title update

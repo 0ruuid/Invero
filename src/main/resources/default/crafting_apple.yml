@@ -32,7 +32,7 @@ items:
 
     action: |-
 
-      msg "<red>pls put an apple in storage 2"
+      tell color "&{red}pls put an apple in storage 2"
       sound ITEM_SHIELD_BREAK by 1 1
 
     sub:
@@ -48,7 +48,7 @@ items:
       action: |-
 
         if storage at 6 exists then {
-          msg "<red>storage 6 exists some items."
+          tell color "&{red}storage 6 exists some items."
           sound ITEM_SHIELD_BREAK by 1 1
           exit
         }
@@ -61,6 +61,6 @@ items:
           storage at 6 free
           sound BLOCK_NOTE_PLING by 1 1
         } else {
-          msg "<red>Apple is required"
+          tell color "&{red}Apple is required"
           sound ITEM_SHIELD_BREAK by 1 1
         }

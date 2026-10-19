@@ -25,13 +25,13 @@ items:
       cancel: [ 'exit', 'cancel' ]
       # (可选) 捕获器开始前的动作
       beforeInput: |
-        tell "&7Please input something"
+        tell color "&7Please input something"
       # (可选) 捕获到内容之后的动作
       afterInput: |
-        tell "&7You input: &e{{&custom_tag_sign}}"
+        tell color inline "&7You input: &e{{&custom_tag_sign}}"
       # (可选) 取消捕获器后的动作
       onCancel: |
-        tell "&7You cancelled the input"
+        tell color "&7You cancelled the input"
       #
       # 如果 afterInput 返回的值为 false，那么会重新执行捕获请求
       # （不会再执行 beforeInput）
@@ -49,13 +49,13 @@ items:
       cancel: [ 'exit', 'cancel' ]
       # (可选) 捕获器开始前的动作
       beforeInput: |
-        tell "&7Please input something"
+        tell color "&7Please input something"
       # (可选) 捕获到内容之后的动作
       afterInput: |
-        tell "&7You input: &e{{&custom_tag_chat}}"
+        tell color inline "&7You input: &e{{&custom_tag_chat}}"
       # (可选) 取消捕获器后的动作
       onCancel: |
-        tell "&7You cancelled the input"
+        tell color "&7You cancelled the input"
       #
       # 如果 afterInput 返回的值为 false，那么会重新执行捕获请求
       # （不会再执行 beforeInput）
